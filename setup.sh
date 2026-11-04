@@ -6,9 +6,33 @@ set -Eeuo pipefail
 # SERVER BOOTSTRAP - CENTRAL CONTROLLER
 # ========================================
 
-BASE_DIR="/opt/server-bootstrap"
-TEMPLATE_DIR="$BASE_DIR/templates"
-CERT_DIR="/opt/cert-export"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+TEMPLATES_DIR="$SCRIPT_DIR/templates"
+CONFIG_FILE="$SCRIPT_DIR/config.conf"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Missing configuration: $CONFIG_FILE"
+    exit 1
+fi
+
+SSH_EXTRA_IPS=()
+SSH_KEYS=()
+
+source "$CONFIG_FILE"
+
+: "${CERT_DIR:?CERT_DIR is not configured}"
+: "${SSH_ALL:?SSH_ALL is not configured}"
+
+# Resolve relative certificate directory against script directory
+if [[ "$CERT_DIR" != /* ]]; then
+    CERT_DIR="$SCRIPT_DIR/$CERT_DIR"
+fi
+
+if [[ ! "$SSH_ALL" =~ ^(true|false)$ ]]; then
+    echo "SSH_ALL must be true or false."
+    exit 1
+fi
 
 # SSH settings
 SSH_OPTS=(
@@ -29,8 +53,8 @@ done
 
 # Check local files
 for file in nginx.conf common-site.conf; do
-    [[ -s "$TEMPLATE_DIR/$file" ]] || {
-        echo "Missing template: $TEMPLATE_DIR/$file"
+    [[ -s "$TEMPLATES_DIR/$file" ]] || {
+        echo "Missing template: $TEMPLATES_DIR/$file"
         exit 1
     }
 done
@@ -42,9 +66,60 @@ for file in fullchain.pem privkey.pem; do
     }
 done
 
+HOST_IPV4="$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]}' | python3 -c '
+import sys, ipaddress
+for line in sys.stdin:
+    try:
+        ip = ipaddress.ip_address(line.strip())
+        if ip.is_global:
+            print(ip)
+            break
+    except ValueError:
+        pass
+')"
+
+HOST_IPV6="$(ip -6 -o addr show scope global |
+    awk '!/temporary|deprecated|tentative|dadfailed/ {split($4,a,"/"); print a[1]}' |
+    python3 -c '
+import sys, ipaddress
+for line in sys.stdin:
+    try:
+        ip = ipaddress.ip_address(line.strip())
+        if ip.version == 6 and ip.is_global:
+            print(ip)
+            break
+    except ValueError:
+        pass
+')"
+
+if [[ "$SSH_ALL" == "false" && -z "$HOST_IPV4" && -z "$HOST_IPV6" && ${#SSH_EXTRA_IPS[@]} -eq 0 ]]; then
+    echo "ERROR: No SSH allowed IP addresses configured."
+    exit 1
+fi
+
+for ip in "${SSH_EXTRA_IPS[@]}"; do
+    python3 - "$ip" <<'PY'
+import ipaddress
+import sys
+
+try:
+    ipaddress.ip_address(sys.argv[1])
+except ValueError:
+    print(f"Invalid SSH IP: {sys.argv[1]}")
+    sys.exit(1)
+PY
+done
+
 # Input
 echo "========================================"
 echo "         SERVER BOOTSTRAP"
+echo "========================================"
+echo
+
+echo "========================================"
+echo "Controller IPv4: ${HOST_IPV4:-not detected}"
+echo "Controller IPv6: ${HOST_IPV6:-not detected}"
+echo "SSH unrestricted: $SSH_ALL"
 echo "========================================"
 echo
 
@@ -98,8 +173,17 @@ echo "----------------------------------------"
 echo
 echo "WARNING:"
 echo "UFW will be reset and reconfigured."
-echo "SSH access will only be allowed from the"
-echo "IP addresses specified in the script."
+echo "SSH access configuration:"
+if [[ "$SSH_ALL" == "true" ]]; then
+    echo "  SSH: allowed from ANY IP"
+else
+    echo "  SSH IPv4: ${HOST_IPV4:-not detected}"
+    echo "  SSH IPv6: ${HOST_IPV6:-not detected}"
+
+    for ip in "${SSH_EXTRA_IPS[@]}"; do
+        echo "  Additional SSH IP: $ip"
+    done
+fi
 echo
 
 read -r -p "Continue? [y/N]: " CONFIRM
@@ -157,6 +241,31 @@ set -Eeuo pipefail
 
 DOMAIN="$1"
 STAGE_DIR="$2"
+HOST_IPV4="$3"
+HOST_IPV6="$4"
+SSH_ALL="$5"
+
+shift 5
+
+SSH_EXTRA_COUNT="$1"
+shift
+
+SSH_EXTRA_IPS=()
+
+for ((i = 0; i < SSH_EXTRA_COUNT; i++)); do
+    SSH_EXTRA_IPS+=("$1")
+    shift
+done
+
+SSH_KEYS_COUNT="$1"
+shift
+
+SSH_KEYS=()
+
+for ((i = 0; i < SSH_KEYS_COUNT; i++)); do
+    SSH_KEYS+=("$1")
+    shift
+done
 
 if [[ $EUID -ne 0 ]]; then
     echo "Remote script must run as root."
@@ -304,12 +413,8 @@ echo "Adding SSH authorized keys..."
 
 install -d -o root -g root -m 0700 /root/.ssh
 touch /root/.ssh/authorized_keys
+chown root:root /root/.ssh/authorized_keys
 chmod 0600 /root/.ssh/authorized_keys
-
-SSH_KEYS=(
-'from="185.180.230.55,2a04:5200:fff5::4a" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIyM3FIAxS4rev68quDZUkAV/SJu/ghx4MjzPCzPdJZe certbot-deploy'
-'from="95.105.56.138" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJMeecDje5JgYafmOZDa4NO0nenUHOv1iI6ATOGTWe93 VPN Key@Termix'
-)
 
 for key in "${SSH_KEYS[@]}"; do
     if ! grep -Fqx -- "$key" /root/.ssh/authorized_keys; then
@@ -336,20 +441,31 @@ ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 
-ufw allow from 95.105.56.138 to any port 22 proto tcp
-ufw allow from 185.180.230.55 to any port 22 proto tcp
-ufw allow from 2a04:5200:fff5::4a to any port 22 proto tcp
+# SSH
+if [[ "$SSH_ALL" == "true" ]]; then
+    ufw allow 22/tcp
+else
+    [[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port 22 proto tcp
+    [[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port 22 proto tcp
 
+    for ip in "${SSH_EXTRA_IPS[@]}"; do
+        ufw allow from "$ip" to any port 22 proto tcp
+    done
+fi
+
+# HTTP / HTTPS
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw allow 443/udp
 ufw allow 8443/udp
 
-ufw allow from 185.180.230.55 to any port 8080 proto tcp
-ufw allow from 2a04:5200:fff5::4a to any port 8080 proto tcp
+# Panel 8080
+[[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port 8080 proto tcp
+[[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port 8080 proto tcp
 
-ufw allow from 185.180.230.55 to any port 465 proto tcp
-ufw allow from 2a04:5200:fff5::4a to any port 465 proto tcp
+# SMTP 465
+[[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port 465 proto tcp
+[[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port 465 proto tcp
 
 ufw --force enable
 
@@ -369,8 +485,8 @@ echo "[2/5] Transferring configuration and certificates..."
 
 scp_target \
     "$LOCAL_TMP/remote-setup.sh" \
-    "$TEMPLATE_DIR/nginx.conf" \
-    "$TEMPLATE_DIR/common-site.conf" \
+    "$TEMPLATES_DIR/nginx.conf" \
+    "$TEMPLATES_DIR/common-site.conf" \
     "$CERT_DIR/fullchain.pem" \
     "$CERT_DIR/privkey.pem"
 
@@ -378,10 +494,25 @@ scp_target \
 echo
 echo "[3/5] Starting remote installation..."
 
+REMOTE_ARGS=()
+
+REMOTE_ARGS+=("$DOMAIN" "$REMOTE_DIR" "$HOST_IPV4" "$HOST_IPV6" "$SSH_ALL")
+REMOTE_ARGS+=("${#SSH_EXTRA_IPS[@]}")
+REMOTE_ARGS+=("${SSH_EXTRA_IPS[@]}")
+REMOTE_ARGS+=("${#SSH_KEYS[@]}")
+REMOTE_ARGS+=("${SSH_KEYS[@]}")
+
+REMOTE_ARGS_ESCAPED=""
+
+for arg in "${REMOTE_ARGS[@]}"; do
+    printf -v escaped '%q' "$arg"
+    REMOTE_ARGS_ESCAPED+=" $escaped"
+done
+
 REMOTE_COMMAND="if [ \"\$(id -u)\" -eq 0 ]; then
-    bash '$REMOTE_DIR/remote-setup.sh' '$DOMAIN' '$REMOTE_DIR'
+    bash '$REMOTE_DIR/remote-setup.sh'$REMOTE_ARGS_ESCAPED
 else
-    sudo -S -p '' bash '$REMOTE_DIR/remote-setup.sh' '$DOMAIN' '$REMOTE_DIR'
+    sudo -S -p '' bash '$REMOTE_DIR/remote-setup.sh'$REMOTE_ARGS_ESCAPED
 fi"
 
 printf '%s\n' "$SSHPASS" | sshpass -e ssh "${SSH_OPTS[@]}" \
