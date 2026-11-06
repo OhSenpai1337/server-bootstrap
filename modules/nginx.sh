@@ -2,49 +2,72 @@
 #!/usr/bin/env bash
 
 install_nginx() {
-    local DOMAIN="$1"
-    local CERT_METHOD="$2"
-    local CERT_SOURCE_FULLCHAIN="$3"
-    local CERT_SOURCE_KEY="$4"
-    local SUBSCRIPTION="$5"
-    local CERTBOT_EMAIL="$6"
-    local INSTALL_MODE="$7"
-
     local NGINX_CERT_FULLCHAIN=""
     local NGINX_CERT_KEY=""
+    local CERT_TMP_DIR=""
 
-    echo "Installing Nginx dependencies..."
-    apt-get install -y curl gnupg2 ca-certificates lsb-release ubuntu-keyring openssl
+    [[ -n "$DOMAIN" ]] || {
+        echo "ERROR: Domain is required for Nginx."
+        return 1
+    }
 
-    echo "Installing official Nginx package..."
+    local ports=("$PANEL_PORT")
+    [[ "$SUBSCRIPTION" == "true" ]] && ports+=("$SUBSCRIPTION_PORT")
+
+    for port in "${ports[@]}"; do
+        [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || {
+            echo "ERROR: Invalid port: $port"
+            return 1
+        }
+    done
+
+    log "Installing Nginx dependencies..."
+    apt-get install -y gnupg2 ca-certificates lsb-release openssl
+
+    . /etc/os-release
+
+    case "$ID" in
+        ubuntu)
+            NGINX_REPO="ubuntu"
+            apt-get install -y ubuntu-keyring
+            ;;
+        debian)
+            NGINX_REPO="debian"
+            apt-get install -y debian-archive-keyring
+            ;;
+        *)
+            die "Unsupported distribution: $ID"
+            ;;
+    esac
+
+    log "Installing official Nginx package..."
     install -d -m 0755 /usr/share/keyrings
+
     curl -fsSL https://nginx.org/keys/nginx_signing.key |
         gpg --dearmor --yes -o /usr/share/keyrings/nginx-archive-keyring.gpg
+
     chmod 0644 /usr/share/keyrings/nginx-archive-keyring.gpg
 
-    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] https://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" \
+    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] https://nginx.org/packages/$NGINX_REPO $(lsb_release -cs) nginx" \
         > /etc/apt/sources.list.d/nginx.list
 
     apt-get update
     apt-get install -y nginx
 
-    # Obtain Let's Encrypt certificate locally.
+    # Obtain Let's Encrypt certificate.
     if [[ "$CERT_METHOD" == "certbot" ]]; then
-        if [[ "$INSTALL_MODE" != "local" ]]; then
-            echo "ERROR: Certbot is only supported for local installation."
-            return 1
-        fi
-
         [[ -n "$CERTBOT_EMAIL" ]] || {
-            echo "Certbot email is required."
+            echo "ERROR: Certbot email is required."
             return 1
         }
 
         echo "Installing Certbot..."
         apt-get install -y snapd
-        snap install core
+
+        snap list core >/dev/null 2>&1 || snap install core
         snap refresh core
-        snap install --classic certbot
+
+        snap list certbot >/dev/null 2>&1 || snap install --classic certbot
         ln -sf /snap/bin/certbot /usr/bin/certbot
 
         echo "Installing Certbot renewal hooks..."
@@ -76,51 +99,76 @@ EOF
             --keep-until-expiring \
             --email "$CERTBOT_EMAIL" \
             -d "$DOMAIN"; then
-            systemctl start nginx
+
+            systemctl start nginx || true
             echo "ERROR: Certbot certificate issuance failed."
             return 1
         fi
 
         CERT_SOURCE_FULLCHAIN="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
         CERT_SOURCE_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
-    fi
 
-    # Validate certificate and private key.
-    [[ -s "$CERT_SOURCE_FULLCHAIN" && -s "$CERT_SOURCE_KEY" ]] || {
-        echo "ERROR: Certificate or private key is missing."
-        return 1
-    }
-
-    openssl x509 -in "$CERT_SOURCE_FULLCHAIN" -noout -checkhost "$DOMAIN" || {
-        echo "ERROR: Certificate does not cover $DOMAIN."
-        return 1
-    }
-
-    openssl x509 -in "$CERT_SOURCE_FULLCHAIN" -pubkey -noout |
-        openssl pkey -pubin -outform DER > /tmp/nginx-cert.pub
-
-    openssl pkey -in "$CERT_SOURCE_KEY" -pubout -outform DER > /tmp/nginx-key.pub
-
-    if ! cmp -s /tmp/nginx-cert.pub /tmp/nginx-key.pub; then
-        rm -f /tmp/nginx-cert.pub /tmp/nginx-key.pub
-        echo "ERROR: Certificate and private key do not match."
+    elif [[ "$CERT_METHOD" != "existing" ]]; then
+        echo "ERROR: Invalid certificate method: $CERT_METHOD"
         return 1
     fi
-
-    rm -f /tmp/nginx-cert.pub /tmp/nginx-key.pub
 
     # Select certificate paths.
-    if [[ "$INSTALL_MODE" == "remote" ]]; then
+    if [[ "$CERT_METHOD" == "certbot" ]]; then
+        NGINX_CERT_FULLCHAIN="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+        NGINX_CERT_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+
+    elif [[ "$INSTALL_MODE" == "remote" ]]; then
         NGINX_CERT_FULLCHAIN="/etc/nginx/ssl/fullchain.pem"
         NGINX_CERT_KEY="/etc/nginx/ssl/privkey.pem"
 
         install -d -o root -g root -m 0700 /etc/nginx/ssl
         install -o root -g root -m 0644 "$CERT_SOURCE_FULLCHAIN" "$NGINX_CERT_FULLCHAIN"
         install -o root -g root -m 0600 "$CERT_SOURCE_KEY" "$NGINX_CERT_KEY"
+
     else
         NGINX_CERT_FULLCHAIN="$CERT_SOURCE_FULLCHAIN"
         NGINX_CERT_KEY="$CERT_SOURCE_KEY"
     fi
+
+    # Validate selected certificate and private key.
+    [[ -s "$NGINX_CERT_FULLCHAIN" ]] || {
+        echo "ERROR: Certificate not found: $NGINX_CERT_FULLCHAIN"
+        return 1
+    }
+
+    [[ -s "$NGINX_CERT_KEY" ]] || {
+        echo "ERROR: Private key not found: $NGINX_CERT_KEY"
+        return 1
+    }
+
+    if ! openssl x509 -in "$NGINX_CERT_FULLCHAIN" -noout -checkhost "$DOMAIN"; then
+        echo "ERROR: Certificate does not cover $DOMAIN."
+        return 1
+    fi
+
+    CERT_TMP_DIR="$(mktemp -d)"
+
+    if ! openssl x509 -in "$NGINX_CERT_FULLCHAIN" -pubkey -noout |
+        openssl pkey -pubin -outform DER > "$CERT_TMP_DIR/cert.pub"; then
+        rm -rf "$CERT_TMP_DIR"
+        echo "ERROR: Could not read certificate public key."
+        return 1
+    fi
+
+    if ! openssl pkey -in "$NGINX_CERT_KEY" -pubout -outform DER > "$CERT_TMP_DIR/key.pub"; then
+        rm -rf "$CERT_TMP_DIR"
+        echo "ERROR: Could not read private key."
+        return 1
+    fi
+
+    if ! cmp -s "$CERT_TMP_DIR/cert.pub" "$CERT_TMP_DIR/key.pub"; then
+        rm -rf "$CERT_TMP_DIR"
+        echo "ERROR: Certificate and private key do not match."
+        return 1
+    fi
+
+    rm -rf "$CERT_TMP_DIR"
 
     # Install Nginx configuration.
     install -d -m 0755 \
@@ -130,19 +178,34 @@ EOF
         /var/www/html
 
     install -m 0644 "$TEMPLATES_DIR/nginx.conf" /etc/nginx/nginx.conf
-    install -m 0644 "$TEMPLATES_DIR/common-site.conf" /etc/nginx/snippets/common-site.conf
+
+    install -m 644 "$TEMPLATES_DIR/common-site.conf" \
+    /etc/nginx/snippets/common-site.conf
+
+    # Generate 3x-ui panel configuration.
+    sed \
+        -e "s|__WEB_BASE_PATH__|$WEB_BASE_PATH|g" \
+        -e "s|__PANEL_PORT__|$PANEL_PORT|g" \
+        "$TEMPLATES_DIR/3x-ui.conf" \
+        > /etc/nginx/snippets/3x-ui.conf
+
+    # Generate WebSocket API configuration.
+    sed \
+        -e "s|__VLESS_WS_PATH__|$VLESS_WS_PATH|g" \
+        "$TEMPLATES_DIR/ws.conf" \
+        > /etc/nginx/snippets/ws.conf
 
     # Generate SSL snippet with selected certificate paths.
     if ! awk \
         -v cert="$NGINX_CERT_FULLCHAIN" \
         -v key="$NGINX_CERT_KEY" '
         /^[[:space:]]*ssl_certificate[[:space:]]/ {
-            print "ssl_certificate " cert ";"
+            print "ssl_certificate \"" cert "\";"
             cert_found++
             next
         }
         /^[[:space:]]*ssl_certificate_key[[:space:]]/ {
-            print "ssl_certificate_key " key ";"
+            print "ssl_certificate_key \"" key "\";"
             key_found++
             next
         }
@@ -157,8 +220,15 @@ EOF
         return 1
     fi
 
+    # Generate sub.conf with configured subscription port.
     if [[ "$SUBSCRIPTION" == "true" ]]; then
-        install -m 0644 "$TEMPLATES_DIR/sub.conf" /etc/nginx/snippets/sub.conf
+        # Generate subscription configuration.
+        sed \
+            -e "s|__SUB_PATH__|$SUB_PATH|g" \
+            -e "s|__SUB_CLASH_PATH__|$SUB_CLASH_PATH|g" \
+            -e "s|__SUBSCRIPTION_PORT__|$SUBSCRIPTION_PORT|g" \
+            "$TEMPLATES_DIR/sub.conf" \
+            > /etc/nginx/snippets/sub.conf
     else
         rm -f /etc/nginx/snippets/sub.conf
     fi
@@ -183,6 +253,8 @@ server {
 
     include /etc/nginx/snippets/ssl.conf;
     include /etc/nginx/snippets/common-site.conf;
+    include /etc/nginx/snippets/3x-ui.conf;
+    include /etc/nginx/snippets/ws.conf;
 EOF
 
     if [[ "$SUBSCRIPTION" == "true" ]]; then
@@ -201,5 +273,5 @@ EOF
     systemctl enable nginx
     systemctl restart nginx
 
-    echo "Nginx installed and configured for $DOMAIN."
+    log "Nginx installed and configured for $DOMAIN."
 }

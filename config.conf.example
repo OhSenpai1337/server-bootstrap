@@ -1,0 +1,35 @@
+# ========================================
+# SERVER BOOTSTRAP CONFIGURATION
+# ========================================
+
+# Additional IP addresses allowed to connect via SSH.
+SSH_EXTRA_IPS=(
+    # IPs
+)
+
+# Allow SSH from any IP.
+SSH_ALL=false
+
+# SSH public keys added to /root/.ssh/authorized_keys.
+SSH_KEYS=(
+    # Add your public SSH keys here
+)
+
+# SSL certificate paths
+SSL_FULLCHAIN="/path/to/fullchain.pem"
+SSL_PRIVKEY="/path/to/privkey.pem"
+
+# Service ports
+PANEL_PORT=8080
+SUBSCRIPTION_PORT=465
+
+# 3x-ui installation script URL:
+# Available sources:
+# STANDARD - https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh
+# PURE     - https://raw.githubusercontent.com/vermiliondevil-web/pure-3x-ui/main/install.sh
+XUI_INSTALL_URL="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+# CHANGE IT, THERE IS NOT CHECK FOR DUMMIES :)
+WEB_BASE_PATH="/PATH_TO_YOUR_PANEL/"
+SUB_PATH="/SUB_PATH/"
+SUB_CLASH_PATH="/SUB_CLASH_PATH/"
+VLESS_WS_PATH="/VLESS_WS_PATH/"

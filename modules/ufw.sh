@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 install_ufw() {
-    echo "Installing UFW..."
+    log "Installing UFW..."
     apt-get install -y ufw
 
     echo "Resetting and configuring UFW..."
@@ -46,12 +46,12 @@ install_ufw() {
 
     # Panel and subscription ports are restricted to the controller/client IP.
     if [[ "$INSTALL_MODE" != "local" ]]; then
-        [[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port 8080 proto tcp
-        [[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port 8080 proto tcp
-        [[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port 465 proto tcp
-        [[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port 465 proto tcp
+        [[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port "$SUBSCRIPTION_PORT" proto tcp
+        [[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port "$SUBSCRIPTION_PORT" proto tcp
     fi
 
     ufw --force enable
     ufw status verbose
+
+    log "UFW installed and configured."
 }

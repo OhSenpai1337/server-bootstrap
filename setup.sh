@@ -3,23 +3,46 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.conf"
+source "$SCRIPT_DIR/modules/common.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Missing configuration: $CONFIG_FILE"
-    exit 1
+    cp "$SCRIPT_DIR/config.conf.example" "$CONFIG_FILE"
+    echo "Created config.conf from config.conf.example."
+    echo "Please edit the configuration before continuing."
+    exit 0
 fi
+
+# ========================================
+# PRECHECKS
+# ========================================
+
+[[ "$EUID" -eq 0 ]] || die "Run this script as root."
+
+[[ -f /etc/os-release ]] || die "Cannot determine operating system."
+source /etc/os-release
+
+[[ "$ID" == "ubuntu" || "$ID" == "debian" ]] ||
+    die "Only Ubuntu and Debian are supported."
 
 SSH_EXTRA_IPS=()
 SSH_KEYS=()
-CERT_DIR=""
+SSL_FULLCHAIN=""
+SSL_PRIVKEY=""
 SSH_ALL=""
 source "$CONFIG_FILE"
 
 : "${SSH_ALL:?SSH_ALL is not configured}"
 [[ "$SSH_ALL" =~ ^(true|false)$ ]] || { echo "SSH_ALL must be true or false."; exit 1; }
 
-if [[ "$CERT_DIR" != /* && -n "$CERT_DIR" ]]; then
-    CERT_DIR="$SCRIPT_DIR/$CERT_DIR"
+if [[ -n "$SSL_FULLCHAIN" && -n "$SSL_PRIVKEY" ]]; then
+    [[ "$SSL_FULLCHAIN" == /* ]] || SSL_FULLCHAIN="$SCRIPT_DIR/$SSL_FULLCHAIN"
+    [[ "$SSL_PRIVKEY" == /* ]] || SSL_PRIVKEY="$SCRIPT_DIR/$SSL_PRIVKEY"
+
+    [[ -s "$SSL_FULLCHAIN" ]] || { echo "Certificate not found: $SSL_FULLCHAIN"; exit 1; }
+    [[ -s "$SSL_PRIVKEY" ]] || { echo "Private key not found: $SSL_PRIVKEY"; exit 1; }
+elif [[ -n "$SSL_FULLCHAIN" || -n "$SSL_PRIVKEY" ]]; then
+    echo "ERROR: SSL_FULLCHAIN and SSL_PRIVKEY must both be configured."
+    exit 1
 fi
 
 for ip in "${SSH_EXTRA_IPS[@]}"; do
@@ -50,52 +73,53 @@ case "$TARGET_MODE" in
     1) INSTALL_TARGET="local" ;;
     2) INSTALL_TARGET="remote" ;;
     0) exit 0 ;;
-    *) echo "Invalid selection."; exit 1 ;;
+    *) log "Invalid selection."; exit 1 ;;
 esac
 
-echo
-echo "1. Full installation (UFW + Nginx)"
-echo "2. UFW only"
-echo "3. Nginx only"
-echo "0. Back"
-read -r -p "Select installation mode: " INSTALL_MODE
+APPLY_MODE="full"
 
-case "$INSTALL_MODE" in
-    1) APPLY_MODE="full" ;;
-    2) APPLY_MODE="ufw" ;;
-    3) APPLY_MODE="nginx" ;;
-    0) exit 0 ;;
-    *) echo "Invalid selection."; exit 1 ;;
-esac
-
-SUBSCRIPTION="false"
 DOMAIN=""
 CERT_SOURCE_FULLCHAIN=""
 CERT_SOURCE_KEY=""
 
 CERT_METHOD="existing"
 CERTBOT_EMAIL=""
+CERT_IS_WILDCARD="false"
 
-if [[ "$APPLY_MODE" == "nginx" || "$APPLY_MODE" == "full" ]]; then
-    echo
-    echo "Nginx configuration:"
-    echo "1. Without subscription"
-    echo "2. With subscription"
-    read -r -p "Select configuration: " SUB_MODE
-    case "$SUB_MODE" in
-        1) SUBSCRIPTION="false" ;;
-        2) SUBSCRIPTION="true" ;;
-        *) echo "Invalid selection."; exit 1 ;;
-    esac
+read -r -p "Domain: " DOMAIN
+DOMAIN="${DOMAIN,,}"
 
-    read -r -p "Domain: " DOMAIN
-    DOMAIN="${DOMAIN,,}"
-    if [[ ! "$DOMAIN" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
-        echo "Invalid domain: $DOMAIN"
-        exit 1
-    fi
+if [[ ! "$DOMAIN" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
+    log "Invalid domain: $DOMAIN"
+    exit 1
+fi
 
-    if [[ "$INSTALL_TARGET" == "local" ]]; then
+# Check whether the configured certificate is a wildcard
+# certificate that covers the requested domain.
+if [[ -n "$SSL_FULLCHAIN" ]]; then
+    while IFS= read -r wildcard_domain; do
+        if [[ "$DOMAIN" == *."$wildcard_domain" ]]; then
+            prefix="${DOMAIN%.$wildcard_domain}"
+
+            if [[ -n "$prefix" && "$prefix" != *.* ]]; then
+                CERT_IS_WILDCARD="true"
+                break
+            fi
+        fi
+    done < <(
+        openssl x509 -in "$SSL_FULLCHAIN" -noout -ext subjectAltName 2>/dev/null |
+            grep -oE 'DNS:\*\.[a-zA-Z0-9.-]+' |
+            sed 's/^DNS:\*\.//'
+    )
+fi
+
+if [[ "$INSTALL_TARGET" == "local" ]]; then
+
+    if [[ -n "$SSL_FULLCHAIN" ]]; then
+        CERT_METHOD="existing"
+        CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
+        CERT_SOURCE_KEY="$SSL_PRIVKEY"
+    else
         echo
         echo "Certificate configuration:"
         echo "1. Existing certificates"
@@ -105,14 +129,23 @@ if [[ "$APPLY_MODE" == "nginx" || "$APPLY_MODE" == "full" ]]; then
         case "$CERT_CHOICE" in
             1)
                 CERT_METHOD="existing"
+
                 read -r -p "Fullchain certificate path: " CERT_SOURCE_FULLCHAIN
                 read -r -p "Private key path: " CERT_SOURCE_KEY
 
-                [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || { echo "Certificate not found."; exit 1; }
-                [[ -s "$CERT_SOURCE_KEY" ]] || { echo "Private key not found."; exit 1; }
+                [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || {
+                    log "Certificate not found."
+                    exit 1
+                }
+
+                [[ -s "$CERT_SOURCE_KEY" ]] || {
+                    log "Private key not found."
+                    exit 1
+                }
                 ;;
             2)
                 CERT_METHOD="certbot"
+
                 read -r -p "Let's Encrypt email: " CERTBOT_EMAIL
 
                 [[ "$CERTBOT_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || {
@@ -121,26 +154,32 @@ if [[ "$APPLY_MODE" == "nginx" || "$APPLY_MODE" == "full" ]]; then
                 }
                 ;;
             *)
-                echo "Invalid selection."
+                log "Invalid selection."
                 exit 1
                 ;;
         esac
-    else
-        CERT_METHOD="existing"
-        CERT_SOURCE_FULLCHAIN="$CERT_DIR/fullchain.pem"
-        CERT_SOURCE_KEY="$CERT_DIR/privkey.pem"
-
-        [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || { echo "Certificate not found: $CERT_SOURCE_FULLCHAIN"; exit 1; }
-        [[ -s "$CERT_SOURCE_KEY" ]] || { echo "Private key not found: $CERT_SOURCE_KEY"; exit 1; }
     fi
-fi
 
-if [[ "$APPLY_MODE" == "nginx" ]]; then
-    echo
-    echo "WARNING: Nginx will be installed WITHOUT configuring UFW."
-    echo "The server may be exposed to unauthorized access."
-    read -r -p "Are you sure you want to continue? [y/N]: " CONFIRM
-    [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
+else
+    if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
+        CERT_METHOD="existing"
+        CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
+        CERT_SOURCE_KEY="$SSL_PRIVKEY"
+
+        log "Wildcard certificate detected. It will be copied to the remote server."
+    else
+        # Certificate selection will be performed on the remote server.
+        CERT_METHOD="existing"
+        CERT_SOURCE_FULLCHAIN=""
+        CERT_SOURCE_KEY=""
+
+        if [[ -n "$SSL_FULLCHAIN" ]]; then
+            log "Configured certificate is not a wildcard certificate for $DOMAIN."
+            log "Certificate selection will be performed on the remote server."
+        else
+            log "No certificate configured. Certificate selection will be performed on the remote server."
+        fi
+    fi
 fi
 
 HOST_IPV4=""
@@ -188,13 +227,13 @@ PY
     HOST_IPV6="$(ip -6 -o addr show scope global | awk '!/temporary|deprecated|tentative|dadfailed/ {split($4,a,"/"); print a[1]}' | python3 -c 'import sys,ipaddress; [print(x) for x in sys.stdin if (lambda a: a.version == 6 and a.is_global)(ipaddress.ip_address(x.strip()))]' | head -n1)"
 
     if [[ "$SSH_ALL" == "false" && -z "$HOST_IPV4" && -z "$HOST_IPV6" && ${#SSH_EXTRA_IPS[@]} -eq 0 ]]; then
-        echo "ERROR: No SSH allowed IP addresses configured."
+        log "ERROR: No SSH allowed IP addresses configured."
         exit 1
     fi
 fi
 
 if [[ "$INSTALL_TARGET" == "local" ]]; then
-    [[ $EUID -eq 0 ]] || { echo "Run local installation as root: sudo bash setup.sh"; exit 1; }
+    [[ $EUID -eq 0 ]] || { log "Run local installation as root: sudo bash setup.sh"; exit 1; }
 fi
 
 echo
@@ -208,19 +247,26 @@ echo "----------------------------------------"
 read -r -p "Continue? [y/N]: " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 
-ARGS=("$INSTALL_TARGET" "$APPLY_MODE" "$SUBSCRIPTION" "$DOMAIN" "$CERT_METHOD" "$CERTBOT_EMAIL" "$HOST_IPV4" "$HOST_IPV6" "$SSH_ALL")
-ARGS+=("${#SSH_EXTRA_IPS[@]}")
-ARGS+=("${SSH_EXTRA_IPS[@]}")
-ARGS+=("${#SSH_KEYS[@]}")
-ARGS+=("${SSH_KEYS[@]}")
+ARGS=(
+    "$INSTALL_TARGET"
+    "$APPLY_MODE"
+    "$DOMAIN"
+    "$CERT_METHOD"
+    "$CERTBOT_EMAIL"
+    "$HOST_IPV4"
+    "$HOST_IPV6"
+    "$CERT_IS_WILDCARD"
+)
+
+ARGS+=("$CERT_SOURCE_FULLCHAIN" "$CERT_SOURCE_KEY")
 
 if [[ "$INSTALL_TARGET" == "local" ]]; then
-    bash "$SCRIPT_DIR/modules/apply.sh" "${ARGS[@]}" "$CERT_SOURCE_FULLCHAIN" "$CERT_SOURCE_KEY"
+    bash "$SCRIPT_DIR/modules/apply.sh" "${ARGS[@]}"
     exit $?
 fi
 
 for cmd in ssh sshpass scp tar; do
-    command -v "$cmd" >/dev/null 2>&1 || { echo "Missing dependency: $cmd (apt install $cmd)"; exit 1; }
+    command -v "$cmd" >/dev/null 2>&1 || { log "Missing dependency: $cmd (apt install $cmd)"; exit 1; }
 done
 
 SSH_OPTS=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new)
@@ -244,26 +290,33 @@ trap cleanup EXIT
 sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "echo SSH connection successful"
 REMOTE_DIR="$(sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" 'mktemp -d /tmp/server-bootstrap.XXXXXX')"
 
-tar -czf "$LOCAL_TMP/modules.tar.gz" -C "$SCRIPT_DIR" modules templates
+tar -czf "$LOCAL_TMP/modules.tar.gz" -C "$SCRIPT_DIR" config.conf modules templates
 sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_TMP/modules.tar.gz" "$SCP_DEST:$REMOTE_DIR/"
-if [[ "$APPLY_MODE" == "nginx" || "$APPLY_MODE" == "full" ]]; then
+if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
     sshpass -e scp "${SSH_OPTS[@]}" "$CERT_SOURCE_FULLCHAIN" "$SCP_DEST:$REMOTE_DIR/fullchain.pem"
     sshpass -e scp "${SSH_OPTS[@]}" "$CERT_SOURCE_KEY" "$SCP_DEST:$REMOTE_DIR/privkey.pem"
 fi
 
 REMOTE_ARGS=("${ARGS[@]}")
-for arg in "${REMOTE_ARGS[@]}"; do printf -v q '%q' "$arg"; REMOTE_ARGS_ESCAPED+=" $q"; done
-REMOTE_COMMAND="mkdir -p '$REMOTE_DIR/package' && tar -xzf '$REMOTE_DIR/modules.tar.gz' -C '$REMOTE_DIR/package' && bash '$REMOTE_DIR/package/modules/apply.sh'$REMOTE_ARGS_ESCAPED"
-if [[ "$APPLY_MODE" == "nginx" || "$APPLY_MODE" == "full" ]]; then
-    REMOTE_COMMAND+=" '$REMOTE_DIR/fullchain.pem' '$REMOTE_DIR/privkey.pem'"
-else
-    REMOTE_COMMAND+=" '' ''"
+
+if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
+    REMOTE_ARGS[9]="$REMOTE_DIR/fullchain.pem"
+    REMOTE_ARGS[10]="$REMOTE_DIR/privkey.pem"
 fi
+REMOTE_ARGS_ESCAPED=""
+
+for arg in "${REMOTE_ARGS[@]}"; do
+    printf -v q '%q' "$arg"
+    REMOTE_ARGS_ESCAPED+=" $q"
+done
+
+REMOTE_COMMAND="mkdir -p '$REMOTE_DIR/package' && tar -xzf '$REMOTE_DIR/modules.tar.gz' -C '$REMOTE_DIR/package' && bash '$REMOTE_DIR/package/modules/apply.sh'$REMOTE_ARGS_ESCAPED"
 
 if sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "id -u | grep -qx 0"; then
-    sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "$REMOTE_COMMAND"
+    sshpass -e ssh -tt "${SSH_OPTS[@]}" "$SSH_DEST" "$REMOTE_COMMAND"
 else
-    printf '%s\n' "$SSHPASS" | sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "sudo -S -p '' bash -c $(printf '%q' "$REMOTE_COMMAND")"
+    sshpass -e ssh -tt "${SSH_OPTS[@]}" "$SSH_DEST" \
+        "sudo -S -p '' bash -c $(printf '%q' "$REMOTE_COMMAND")"
 fi
 
 echo
