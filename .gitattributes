@@ -1,2 +1,14 @@
-# Auto detect text files and perform LF normalization
+# Normalize line endings
 * text=auto
+
+# Shell scripts
+*.sh text eol=lf
+
+# Configuration files
+*.conf text eol=lf
+
+# Nginx templates
+*.conf.template text eol=lf
+
+# Documentation
+*.md text eol=lf
