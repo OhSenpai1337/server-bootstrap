@@ -28,7 +28,6 @@ HOST_IPV6="$7"
 CERT_IS_WILDCARD="$8"
 CERT_SOURCE_FULLCHAIN="${9:-}"
 CERT_SOURCE_KEY="${10:-}"
-NGINX_SUBSCRIPTION="false"
 
 if [[ "$INSTALL_MODE" == "remote" && "$CERT_IS_WILDCARD" == "true" ]]; then
     CERT_SOURCE_FULLCHAIN="$SCRIPT_DIR/../fullchain.pem"
@@ -52,26 +51,6 @@ if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
     [[ -n "$DOMAIN" ]] || die "Domain is required for Nginx."
 
     check_domain_ip "$DOMAIN" "$(get_public_ipv4)"
-
-    
-    if [[ "$INSTALL_MODE" == "local" && "$XUI_SUBSCRIPTION" == "true" ]]; then
-        echo
-        echo "Nginx configuration:"
-        echo "1. Without subscription"
-        echo "2. With subscription"
-        read -r -p "Select configuration: " SUB_MODE
-
-        case "$SUB_MODE" in
-            1) NGINX_SUBSCRIPTION="false" ;;
-            2) NGINX_SUBSCRIPTION="true" ;;
-            *) log "Invalid selection."; exit 1 ;;
-        esac
-    fi
-
-    if [[ "$XUI_SUBSCRIPTION" == "false" && "$NGINX_SUBSCRIPTION" == "true" ]]; then
-        log "NGINX_SUBSCRIPTION cannot be enabled when XUI_SUBSCRIPTION is disabled."
-        exit 1
-    fi
 
     # Remote certificate selection.
     if [[ "$INSTALL_MODE" == "remote" && "$CERT_IS_WILDCARD" != "true" ]]; then

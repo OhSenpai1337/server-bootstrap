@@ -11,7 +11,7 @@ check_system() {
 }
 
 update_system() {
-    log "[1/2] Updating Ubuntu..."
+    log "[1/2] Updating..."
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get upgrade -y
@@ -28,21 +28,19 @@ install_ssh_keys() {
     for key in "${SSH_KEYS[@]}"; do
         if ! grep -Fqx -- "$key" /root/.ssh/authorized_keys; then
             printf '%s\n' "$key" >> /root/.ssh/authorized_keys
-            echo "Added: ${key##* }"
+            log "Added: ${key##* }"
         else
-            echo "Already exists: ${key##* }"
+            log "Already exists: ${key##* }"
         fi
     done
 }
 
 log() {
-    echo
     echo "[$(date '+%H:%M:%S')] $*"
 }
 
 die() {
-    echo
-    echo "ERROR: $*" >&2
+    log "ERROR: $*" >&2
     exit 1
 }
 

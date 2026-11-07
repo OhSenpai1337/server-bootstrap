@@ -25,12 +25,13 @@ SSL_PRIVKEY="/path/to/privkey.pem"
 # PURE     - https://raw.githubusercontent.com/vermiliondevil-web/pure-3x-ui/main/install.sh
 XUI_INSTALL_URL="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
 
-# CHANGE IT, THERE IS NOT CHECK FOR DUMMIES :)
+# CHANGE IT, THERE IS NO CHECK FOR DUMMIES :)
 XUI_PANEL_PORT=8080
 XUI_WEB_BASE_PATH="/PATH_TO_YOUR_PANEL/"
 XUI_VLESS_WS_PATH="/VLESS_WS_PATH/"
 
-XUI_SUBSCRIPTION=true
+XUI_SUBSCRIPTION=true 
+NGINX_SUBSCRIPTION=true
 XUI_SUBSCRIPTION_PORT=465
 XUI_SUB_PATH="/SUB_PATH/"
 XUI_SUB_CLASH_PATH="/SUB_CLASH_PATH/"

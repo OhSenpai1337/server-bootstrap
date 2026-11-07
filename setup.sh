@@ -291,7 +291,7 @@ trap cleanup EXIT
 sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "echo SSH connection successful"
 REMOTE_DIR="$(sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" 'mktemp -d /tmp/server-bootstrap.XXXXXX')"
 
-tar -czf "$LOCAL_TMP/modules.tar.gz" -C "$SCRIPT_DIR" config.conf modules templates
+tar -czf "$LOCAL_TMP/modules.tar.gz" -C "$SCRIPT_DIR" config.conf modules templates scripts
 sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_TMP/modules.tar.gz" "$SCP_DEST:$REMOTE_DIR/"
 if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
     sshpass -e scp "${SSH_OPTS[@]}" "$CERT_SOURCE_FULLCHAIN" "$SCP_DEST:$REMOTE_DIR/fullchain.pem"

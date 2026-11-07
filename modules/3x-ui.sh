@@ -69,10 +69,9 @@ install_3x_ui() {
     if [[ "$NGINX_SUBSCRIPTION" == "true" ]]; then
         SUB_REVERSE_PROXY="true"
         SUB_LISTEN="127.0.0.1"
+        SUB_URI="https://$DOMAIN$XUI_SUB_PATH"
+        SUB_CLASH_URI="https://$DOMAIN$XUI_SUB_CLASH_PATH"
     fi
-
-    SUB_URI="https://$DOMAIN$SUB_PATH"
-    SUB_CLASH_URI="https://$DOMAIN$SUB_CLASH_PATH"
 
     TMP_DIR="$(mktemp -d)"
     INSTALLER_TMP="$(mktemp)"
@@ -86,9 +85,9 @@ install_3x_ui() {
 
     log "3x-ui configuration:"
     log "Installer: $XUI_INSTALL_URL"
-    log "Panel port: $PANEL_PORT"
+    log "Panel port: $XUI_PANEL_PORT"
     if [[ "$NGINX_SUBSCRIPTION" == "true" ]]; then
-        log "Subscription port: $SUBSCRIPTION_PORT"
+        log "Subscription port: $XUI_SUBSCRIPTION_PORT"
         log "Subscription reverse proxy: $SUB_REVERSE_PROXY"
     fi
 

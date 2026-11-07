@@ -11,6 +11,11 @@ install_nginx() {
         return 1
     }
 
+    if [[ "$XUI_SUBSCRIPTION" == "false" && "$NGINX_SUBSCRIPTION" == "true" ]]; then
+        log "NGINX_SUBSCRIPTION cannot be enabled when XUI_SUBSCRIPTION is disabled."
+        exit 1
+    fi
+
     local ports=("$XUI_PANEL_PORT")
     [[ "$NGINX_SUBSCRIPTION" == "true" ]] && ports+=("$XUI_SUBSCRIPTION_PORT")
 
@@ -257,7 +262,6 @@ server {
     include /etc/nginx/snippets/ssl.conf;
     include /etc/nginx/snippets/common-site.conf;
     include /etc/nginx/snippets/3x-ui.conf;
-    include /etc/nginx/snippets/ws.conf;
 EOF
 
     [[ "$XUI_CREATE_INBOUNDS" == "true" ]] && printf '    include /etc/nginx/snippets/ws.conf;\n' >> /etc/nginx/sites-available/default
