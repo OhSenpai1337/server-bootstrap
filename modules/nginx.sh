@@ -11,8 +11,8 @@ install_nginx() {
         return 1
     }
 
-    local ports=("$PANEL_PORT")
-    [[ "$SUBSCRIPTION" == "true" ]] && ports+=("$SUBSCRIPTION_PORT")
+    local ports=("$XUI_PANEL_PORT")
+    [[ "$NGINX_SUBSCRIPTION" == "true" ]] && ports+=("$XUI_SUBSCRIPTION_PORT")
 
     for port in "${ports[@]}"; do
         [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || {
@@ -21,19 +21,18 @@ install_nginx() {
         }
     done
 
-    log "Installing Nginx dependencies..."
-    apt-get install -y gnupg2 ca-certificates lsb-release openssl
+    ensure_dependencies gnupg2 ca-certificates lsb-release openssl
 
     . /etc/os-release
 
     case "$ID" in
         ubuntu)
             NGINX_REPO="ubuntu"
-            apt-get install -y ubuntu-keyring
+            ensure_dependencies ubuntu-keyring
             ;;
         debian)
             NGINX_REPO="debian"
-            apt-get install -y debian-archive-keyring
+            ensure_dependencies debian-archive-keyring
             ;;
         *)
             die "Unsupported distribution: $ID"
@@ -184,16 +183,20 @@ EOF
 
     # Generate 3x-ui panel configuration.
     sed \
-        -e "s|__WEB_BASE_PATH__|$WEB_BASE_PATH|g" \
-        -e "s|__PANEL_PORT__|$PANEL_PORT|g" \
+        -e "s|__WEB_BASE_PATH__|$XUI_WEB_BASE_PATH|g" \
+        -e "s|__PANEL_PORT__|$XUI_PANEL_PORT|g" \
         "$TEMPLATES_DIR/3x-ui.conf" \
         > /etc/nginx/snippets/3x-ui.conf
 
     # Generate WebSocket API configuration.
-    sed \
-        -e "s|__VLESS_WS_PATH__|$VLESS_WS_PATH|g" \
-        "$TEMPLATES_DIR/ws.conf" \
-        > /etc/nginx/snippets/ws.conf
+    if [[ "$XUI_CREATE_INBOUNDS" == "true" ]]; then
+        sed \
+            -e "s|__VLESS_WS_PATH__|$XUI_VLESS_WS_PATH|g" \
+            "$TEMPLATES_DIR/ws.conf" \
+            > /etc/nginx/snippets/ws.conf
+    else
+        rm -f /etc/nginx/snippets/ws.conf
+    fi    
 
     # Generate SSL snippet with selected certificate paths.
     if ! awk \
@@ -221,12 +224,12 @@ EOF
     fi
 
     # Generate sub.conf with configured subscription port.
-    if [[ "$SUBSCRIPTION" == "true" ]]; then
+    if [[ "$NGINX_SUBSCRIPTION" == "true" ]]; then
         # Generate subscription configuration.
         sed \
-            -e "s|__SUB_PATH__|$SUB_PATH|g" \
-            -e "s|__SUB_CLASH_PATH__|$SUB_CLASH_PATH|g" \
-            -e "s|__SUBSCRIPTION_PORT__|$SUBSCRIPTION_PORT|g" \
+            -e "s|__SUB_PATH__|$XUI_SUB_PATH|g" \
+            -e "s|__SUB_CLASH_PATH__|$XUI_SUB_CLASH_PATH|g" \
+            -e "s|__SUBSCRIPTION_PORT__|$XUI_SUBSCRIPTION_PORT|g" \
             "$TEMPLATES_DIR/sub.conf" \
             > /etc/nginx/snippets/sub.conf
     else
@@ -257,9 +260,8 @@ server {
     include /etc/nginx/snippets/ws.conf;
 EOF
 
-    if [[ "$SUBSCRIPTION" == "true" ]]; then
-        printf '    include /etc/nginx/snippets/sub.conf;\n' >> /etc/nginx/sites-available/default
-    fi
+    [[ "$XUI_CREATE_INBOUNDS" == "true" ]] && printf '    include /etc/nginx/snippets/ws.conf;\n' >> /etc/nginx/sites-available/default
+    [[ "$NGINX_SUBSCRIPTION" == "true" ]] && printf '    include /etc/nginx/snippets/sub.conf;\n' >> /etc/nginx/sites-available/default
 
     cat >> /etc/nginx/sites-available/default <<'EOF'
 }

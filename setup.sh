@@ -16,13 +16,16 @@ fi
 # PRECHECKS
 # ========================================
 
-[[ "$EUID" -eq 0 ]] || die "Run this script as root."
-
-[[ -f /etc/os-release ]] || die "Cannot determine operating system."
-source /etc/os-release
-
-[[ "$ID" == "ubuntu" || "$ID" == "debian" ]] ||
-    die "Only Ubuntu and Debian are supported."
+check_system
+ensure_dependencies \
+    python3 \
+    openssl \
+    grep \
+    sed \
+    gawk \
+    iproute2 \
+    coreutils \
+    tar 
 
 SSH_EXTRA_IPS=()
 SSH_KEYS=()
@@ -265,9 +268,7 @@ if [[ "$INSTALL_TARGET" == "local" ]]; then
     exit $?
 fi
 
-for cmd in ssh sshpass scp tar; do
-    command -v "$cmd" >/dev/null 2>&1 || { log "Missing dependency: $cmd (apt install $cmd)"; exit 1; }
-done
+ensure_dependencies openssh-client sshpass
 
 SSH_OPTS=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new)
 SSH_DEST="${SSH_USER}@${TARGET_IP}"

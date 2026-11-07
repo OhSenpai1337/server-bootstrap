@@ -2,7 +2,7 @@
 
 install_ufw() {
     log "Installing UFW..."
-    apt-get install -y ufw
+    ensure_dependencies ufw
 
     echo "Resetting and configuring UFW..."
     ufw --force reset
@@ -45,7 +45,7 @@ install_ufw() {
     ufw allow 8443/udp
 
     # Panel and subscription ports are restricted to the controller/client IP.
-    if [[ "$INSTALL_MODE" != "local" ]]; then
+    if [[ "$INSTALL_MODE" != "local" && "$XUI_SUBSCRIPTION" == "true" ]]; then
         [[ -n "$HOST_IPV4" ]] && ufw allow from "$HOST_IPV4" to any port "$SUBSCRIPTION_PORT" proto tcp
         [[ -n "$HOST_IPV6" ]] && ufw allow from "$HOST_IPV6" to any port "$SUBSCRIPTION_PORT" proto tcp
     fi

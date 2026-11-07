@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
 
-check_ubuntu() {
-    [[ $EUID -eq 0 ]] || { echo "This module must run as root."; return 1; }
-    [[ -r /etc/os-release ]] || { echo "Cannot identify operating system."; return 1; }
+check_system() {
+    [[ "$EUID" -eq 0 ]] || die "Run this script as root."
+
+    [[ -f /etc/os-release ]] || die "Cannot determine operating system."
     source /etc/os-release
-    [[ "${ID:-}" == "ubuntu" ]] || { echo "This script supports Ubuntu only."; return 1; }
+
+    [[ "$ID" == "ubuntu" || "$ID" == "debian" ]] ||
+        die "Only Ubuntu and Debian are supported."
 }
 
 update_system() {
-    log "[1/3] Updating Ubuntu..."
+    log "[1/2] Updating Ubuntu..."
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get upgrade -y
 }
 
-install_dependencies() {
-    log "[2/3] Installing dependencies..."
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get install curl -y
-}
-
 install_ssh_keys() {
     local key
-    log "[3/3] Installing SSH authorized keys..."
+    log "[2/2] Installing SSH authorized keys..."
     install -d -o root -g root -m 0700 /root/.ssh
     touch /root/.ssh/authorized_keys
     chown root:root /root/.ssh/authorized_keys
@@ -71,4 +68,32 @@ get_public_ipv4() {
 
 get_public_ipv6() {
     curl -6fsS --max-time 10 https://api6.ipify.org 2>/dev/null || true
+}
+
+# ========================================
+# DEPENDENCY CHECKS
+# ========================================
+
+ensure_dependencies() {
+    local missing=()
+    local packages=("$@")
+
+    for package in "${packages[@]}"; do
+        dpkg-query -W -f='${Status}' "$package" 2>/dev/null |
+            grep -q "install ok installed" || missing+=("$package")
+    done
+
+    ((${#missing[@]})) || return 0
+
+    log "Installing missing dependencies: ${missing[*]}"
+
+    if [[ $EUID -eq 0 ]]; then
+        apt-get update
+        apt-get install -y "${missing[@]}"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y "${missing[@]}"
+    else
+        die "Root privileges or sudo are required to install dependencies."
+    fi
 }

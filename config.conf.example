@@ -19,17 +19,21 @@ SSH_KEYS=(
 SSL_FULLCHAIN="/path/to/fullchain.pem"
 SSL_PRIVKEY="/path/to/privkey.pem"
 
-# Service ports
-PANEL_PORT=8080
-SUBSCRIPTION_PORT=465
-
 # 3x-ui installation script URL:
 # Available sources:
 # STANDARD - https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh
 # PURE     - https://raw.githubusercontent.com/vermiliondevil-web/pure-3x-ui/main/install.sh
 XUI_INSTALL_URL="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+
 # CHANGE IT, THERE IS NOT CHECK FOR DUMMIES :)
-WEB_BASE_PATH="/PATH_TO_YOUR_PANEL/"
-SUB_PATH="/SUB_PATH/"
-SUB_CLASH_PATH="/SUB_CLASH_PATH/"
-VLESS_WS_PATH="/VLESS_WS_PATH/"
+XUI_PANEL_PORT=8080
+XUI_WEB_BASE_PATH="/PATH_TO_YOUR_PANEL/"
+XUI_VLESS_WS_PATH="/VLESS_WS_PATH/"
+
+XUI_SUBSCRIPTION=true
+XUI_SUBSCRIPTION_PORT=465
+XUI_SUB_PATH="/SUB_PATH/"
+XUI_SUB_CLASH_PATH="/SUB_CLASH_PATH/"
+
+# VLESS-WS, HYSTERIA2, TUICv5
+XUI_CREATE_INBOUNDS=true
