@@ -288,7 +288,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "echo SSH connection successful"
+check_ssh_connection
 REMOTE_DIR="$(sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" 'mktemp -d /tmp/server-bootstrap.XXXXXX')"
 
 tar -czf "$LOCAL_TMP/modules.tar.gz" -C "$SCRIPT_DIR" config.conf modules templates scripts

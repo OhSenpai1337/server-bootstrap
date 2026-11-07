@@ -95,3 +95,28 @@ ensure_dependencies() {
         die "Root privileges or sudo are required to install dependencies."
     fi
 }
+
+check_ssh_connection() {
+    local error_file="$LOCAL_TMP/ssh_error.log"
+    local answer
+
+    if sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "echo SSH connection successful" 2>"$error_file"; then
+        return 0
+    fi
+
+    if grep -q "REMOTE HOST IDENTIFICATION HAS CHANGED" "$error_file"; then
+        log "SSH host key has changed for $SSH_DEST."
+        read -r -p "Remove the old host key and reconnect? [y/N]: " answer
+
+        [[ "$answer" =~ ^[Yy]$ ]] || die "SSH host key verification failed."
+
+        ssh-keygen -R "$SSH_DEST" >/dev/null ||
+            die "Failed to remove the old SSH host key."
+
+        sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "echo SSH connection successful" ||
+            die "SSH connection failed after removing the old host key."
+    else
+        cat "$error_file" >&2
+        die "SSH connection failed."
+    fi
+}
