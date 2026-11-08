@@ -16,6 +16,7 @@ SSH_KEYS=(
 )
 
 # SSL certificate paths
+SSL_USE_EXISTING=true
 SSL_FULLCHAIN="/path/to/fullchain.pem"
 SSL_PRIVKEY="/path/to/privkey.pem"
 
@@ -38,3 +39,4 @@ XUI_SUB_CLASH_PATH="/SUB_CLASH_PATH/"
 
 # VLESS-WS, HYSTERIA2, TUICv5
 XUI_CREATE_INBOUNDS=true
+XUI_AUTODETECT_COUNTRY=true

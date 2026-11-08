@@ -37,15 +37,21 @@ source "$CONFIG_FILE"
 : "${SSH_ALL:?SSH_ALL is not configured}"
 [[ "$SSH_ALL" =~ ^(true|false)$ ]] || { echo "SSH_ALL must be true or false."; exit 1; }
 
-if [[ -n "$SSL_FULLCHAIN" && -n "$SSL_PRIVKEY" ]]; then
+: "${SSL_USE_EXISTING:=true}"
+[[ "$SSL_USE_EXISTING" =~ ^(true|false)$ ]] || die "SSL_USE_EXISTING must be true or false."
+
+if [[ "$SSL_USE_EXISTING" == "true" && -n "$SSL_FULLCHAIN" && -n "$SSL_PRIVKEY" ]]; then
+    SSL_FULLCHAIN="${SSL_FULLCHAIN/#\~/$HOME}"
+    SSL_PRIVKEY="${SSL_PRIVKEY/#\~/$HOME}"
+
     [[ "$SSL_FULLCHAIN" == /* ]] || SSL_FULLCHAIN="$SCRIPT_DIR/$SSL_FULLCHAIN"
     [[ "$SSL_PRIVKEY" == /* ]] || SSL_PRIVKEY="$SCRIPT_DIR/$SSL_PRIVKEY"
 
-    [[ -s "$SSL_FULLCHAIN" ]] || { echo "Certificate not found: $SSL_FULLCHAIN"; exit 1; }
-    [[ -s "$SSL_PRIVKEY" ]] || { echo "Private key not found: $SSL_PRIVKEY"; exit 1; }
-elif [[ -n "$SSL_FULLCHAIN" || -n "$SSL_PRIVKEY" ]]; then
-    echo "ERROR: SSL_FULLCHAIN and SSL_PRIVKEY must both be configured."
-    exit 1
+    [[ -s "$SSL_FULLCHAIN" ]] || die "Certificate not found: $SSL_FULLCHAIN"
+    [[ -s "$SSL_PRIVKEY" ]] || die "Private key not found: $SSL_PRIVKEY"
+
+elif [[ "$SSL_USE_EXISTING" == "true" && ( -n "$SSL_FULLCHAIN" || -n "$SSL_PRIVKEY" ) ]]; then
+    die "SSL_FULLCHAIN and SSL_PRIVKEY must both be configured."
 fi
 
 for ip in "${SSH_EXTRA_IPS[@]}"; do
@@ -88,6 +94,7 @@ CERT_SOURCE_KEY=""
 CERT_METHOD="existing"
 CERTBOT_EMAIL=""
 CERT_IS_WILDCARD="false"
+CERT_REMOTE_SELECT="false"
 
 read -r -p "Domain: " DOMAIN
 DOMAIN="${DOMAIN,,}"
@@ -99,13 +106,17 @@ fi
 
 # Check whether the configured certificate is a wildcard
 # certificate that covers the requested domain.
-if [[ -n "$SSL_FULLCHAIN" ]]; then
+if [[ "$SSL_USE_EXISTING" == "true" && -n "$SSL_FULLCHAIN" ]]; then
     while IFS= read -r wildcard_domain; do
         if [[ "$DOMAIN" == *."$wildcard_domain" ]]; then
             prefix="${DOMAIN%.$wildcard_domain}"
 
             if [[ -n "$prefix" && "$prefix" != *.* ]]; then
                 CERT_IS_WILDCARD="true"
+                CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
+                CERT_SOURCE_KEY="$SSL_PRIVKEY"
+
+                log "Wildcard certificate detected."
                 break
             fi
         fi
@@ -114,75 +125,6 @@ if [[ -n "$SSL_FULLCHAIN" ]]; then
             grep -oE 'DNS:\*\.[a-zA-Z0-9.-]+' |
             sed 's/^DNS:\*\.//'
     )
-fi
-
-if [[ "$INSTALL_TARGET" == "local" ]]; then
-
-    if [[ -n "$SSL_FULLCHAIN" ]]; then
-        CERT_METHOD="existing"
-        CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
-        CERT_SOURCE_KEY="$SSL_PRIVKEY"
-    else
-        echo
-        echo "Certificate configuration:"
-        echo "1. Existing certificates"
-        echo "2. Let's Encrypt (Certbot)"
-        read -r -p "Select certificate method: " CERT_CHOICE
-
-        case "$CERT_CHOICE" in
-            1)
-                CERT_METHOD="existing"
-
-                read -r -p "Fullchain certificate path: " CERT_SOURCE_FULLCHAIN
-                read -r -p "Private key path: " CERT_SOURCE_KEY
-
-                [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || {
-                    log "Certificate not found."
-                    exit 1
-                }
-
-                [[ -s "$CERT_SOURCE_KEY" ]] || {
-                    log "Private key not found."
-                    exit 1
-                }
-                ;;
-            2)
-                CERT_METHOD="certbot"
-
-                read -r -p "Let's Encrypt email: " CERTBOT_EMAIL
-
-                [[ "$CERTBOT_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || {
-                    echo "Invalid email address."
-                    exit 1
-                }
-                ;;
-            *)
-                log "Invalid selection."
-                exit 1
-                ;;
-        esac
-    fi
-
-else
-    if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
-        CERT_METHOD="existing"
-        CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
-        CERT_SOURCE_KEY="$SSL_PRIVKEY"
-
-        log "Wildcard certificate detected. It will be copied to the remote server."
-    else
-        # Certificate selection will be performed on the remote server.
-        CERT_METHOD="existing"
-        CERT_SOURCE_FULLCHAIN=""
-        CERT_SOURCE_KEY=""
-
-        if [[ -n "$SSL_FULLCHAIN" ]]; then
-            log "Configured certificate is not a wildcard certificate for $DOMAIN."
-            log "Certificate selection will be performed on the remote server."
-        else
-            log "No certificate configured. Certificate selection will be performed on the remote server."
-        fi
-    fi
 fi
 
 HOST_IPV4=""
@@ -254,14 +196,12 @@ ARGS=(
     "$INSTALL_TARGET"
     "$APPLY_MODE"
     "$DOMAIN"
-    "$CERT_METHOD"
-    "$CERTBOT_EMAIL"
     "$HOST_IPV4"
     "$HOST_IPV6"
     "$CERT_IS_WILDCARD"
+    "$CERT_SOURCE_FULLCHAIN"
+    "$CERT_SOURCE_KEY"
 )
-
-ARGS+=("$CERT_SOURCE_FULLCHAIN" "$CERT_SOURCE_KEY")
 
 if [[ "$INSTALL_TARGET" == "local" ]]; then
     bash "$SCRIPT_DIR/modules/apply.sh" "${ARGS[@]}"
@@ -298,15 +238,9 @@ if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
     sshpass -e scp "${SSH_OPTS[@]}" "$CERT_SOURCE_KEY" "$SCP_DEST:$REMOTE_DIR/privkey.pem"
 fi
 
-REMOTE_ARGS=("${ARGS[@]}")
-
-if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
-    REMOTE_ARGS[9]="$REMOTE_DIR/fullchain.pem"
-    REMOTE_ARGS[10]="$REMOTE_DIR/privkey.pem"
-fi
 REMOTE_ARGS_ESCAPED=""
 
-for arg in "${REMOTE_ARGS[@]}"; do
+for arg in "${ARGS[@]}"; do
     printf -v q '%q' "$arg"
     REMOTE_ARGS_ESCAPED+=" $q"
 done

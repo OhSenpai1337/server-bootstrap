@@ -60,11 +60,6 @@ install_nginx() {
 
     # Obtain Let's Encrypt certificate.
     if [[ "$CERT_METHOD" == "certbot" ]]; then
-        [[ -n "$CERTBOT_EMAIL" ]] || {
-            echo "ERROR: Certbot email is required."
-            return 1
-        }
-
         echo "Installing Certbot..."
         apt-get install -y snapd
 

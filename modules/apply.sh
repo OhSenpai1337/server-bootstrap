@@ -21,13 +21,14 @@ source "$MODULE_DIR/3x-ui.sh"
 INSTALL_MODE="$1"
 MODE="$2"
 DOMAIN="$3"
-CERT_METHOD="$4"
-CERTBOT_EMAIL="$5"
-HOST_IPV4="$6"
-HOST_IPV6="$7"
-CERT_IS_WILDCARD="$8"
-CERT_SOURCE_FULLCHAIN="${9:-}"
-CERT_SOURCE_KEY="${10:-}"
+HOST_IPV4="$4"
+HOST_IPV6="$5"
+CERT_IS_WILDCARD="$6"
+CERT_SOURCE_FULLCHAIN="${7:-}"
+CERT_SOURCE_KEY="${8:-}"
+
+CERT_METHOD=""
+CERTBOT_EMAIL=""
 
 if [[ "$INSTALL_MODE" == "remote" && "$CERT_IS_WILDCARD" == "true" ]]; then
     CERT_SOURCE_FULLCHAIN="$SCRIPT_DIR/../fullchain.pem"
@@ -52,10 +53,22 @@ if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
 
     check_domain_ip "$DOMAIN" "$(get_public_ipv4)"
 
-    # Remote certificate selection.
-    if [[ "$INSTALL_MODE" == "remote" && "$CERT_IS_WILDCARD" != "true" ]]; then
+    # Select certificate method.
+    if [[ "$SSL_USE_EXISTING" == "false" ]]; then
+        CERT_METHOD="certbot"
+
+        read -r -p "Let's Encrypt email: " CERTBOT_EMAIL
+
+        [[ "$CERTBOT_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die "Invalid email address."
+
+    elif [[ "$CERT_IS_WILDCARD" == "true" ]]; then
+        CERT_METHOD="existing"
+
+        log "Using configured wildcard certificate."
+
+    else
         echo
-        echo "Certificate configuration on remote server:"
+        echo "Certificate configuration:"
         echo "1. Existing certificates"
         echo "2. Let's Encrypt (Certbot)"
         read -r -p "Select certificate method: " CERT_CHOICE
@@ -64,52 +77,37 @@ if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
             1)
                 CERT_METHOD="existing"
 
-                read -r -p "Fullchain certificate path: " CERT_SOURCE_FULLCHAIN
-                read -r -p "Private key path: " CERT_SOURCE_KEY
+                # Use configured paths on local installation.
+                if [[ "$INSTALL_MODE" == "local" && -n "$SSL_FULLCHAIN" ]]; then
+                    CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
+                    CERT_SOURCE_KEY="$SSL_PRIVKEY"
 
-                [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || {
-                    echo "Certificate not found: $CERT_SOURCE_FULLCHAIN"
-                    exit 1
-                }
-
-                [[ -s "$CERT_SOURCE_KEY" ]] || {
-                    echo "Private key not found: $CERT_SOURCE_KEY"
-                    exit 1
-                }
+                    [[ "$CERT_SOURCE_FULLCHAIN" == /* ]] || CERT_SOURCE_FULLCHAIN="$SCRIPT_DIR/$CERT_SOURCE_FULLCHAIN"
+                    [[ "$CERT_SOURCE_KEY" == /* ]] || CERT_SOURCE_KEY="$SCRIPT_DIR/$CERT_SOURCE_KEY"
+                else
+                    read -r -p "Fullchain certificate path: " CERT_SOURCE_FULLCHAIN
+                    read -r -p "Private key path: " CERT_SOURCE_KEY
+                fi
                 ;;
+
             2)
                 CERT_METHOD="certbot"
 
                 read -r -p "Let's Encrypt email: " CERTBOT_EMAIL
 
-                [[ "$CERTBOT_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || {
-                    echo "Invalid email address."
-                    exit 1
-                }
-
-                CERT_SOURCE_FULLCHAIN=""
-                CERT_SOURCE_KEY=""
+                [[ "$CERTBOT_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die "Invalid email address."
                 ;;
+
             *)
-                echo "Invalid selection."
-                exit 1
+                die "Invalid selection."
                 ;;
         esac
     fi
 
-    # Wildcard certificate is copied from the controller.
-    if [[ "$INSTALL_MODE" == "remote" && "$CERT_IS_WILDCARD" == "true" ]]; then
-        CERT_METHOD="existing"
-
-        [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || {
-            echo "Certificate not found: $CERT_SOURCE_FULLCHAIN"
-            exit 1
-        }
-
-        [[ -s "$CERT_SOURCE_KEY" ]] || {
-            echo "Private key not found: $CERT_SOURCE_KEY"
-            exit 1
-        }
+    # Validate selected certificate paths.
+    if [[ "$CERT_METHOD" == "existing" ]]; then
+        [[ -s "$CERT_SOURCE_FULLCHAIN" ]] || die "Certificate not found: $CERT_SOURCE_FULLCHAIN"
+        [[ -s "$CERT_SOURCE_KEY" ]] || die "Private key not found: $CERT_SOURCE_KEY"
     fi
 
     install_nginx
