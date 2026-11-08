@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.conf"
+
 source "$SCRIPT_DIR/modules/common.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -17,6 +18,7 @@ fi
 # ========================================
 
 check_system
+[[ $EUID -eq 0 ]] || die "Run installation as root: sudo bash setup.sh"
 ensure_dependencies \
     python3 \
     openssl \
@@ -25,7 +27,7 @@ ensure_dependencies \
     gawk \
     iproute2 \
     coreutils \
-    tar 
+    tar
 
 SSH_EXTRA_IPS=()
 SSH_KEYS=()
@@ -35,7 +37,7 @@ SSH_ALL=""
 source "$CONFIG_FILE"
 
 : "${SSH_ALL:?SSH_ALL is not configured}"
-[[ "$SSH_ALL" =~ ^(true|false)$ ]] || { echo "SSH_ALL must be true or false."; exit 1; }
+[[ "$SSH_ALL" =~ ^(true|false)$ ]] || die "SSH_ALL must be true or false."
 
 : "${SSL_USE_EXISTING:=true}"
 [[ "$SSL_USE_EXISTING" =~ ^(true|false)$ ]] || die "SSL_USE_EXISTING must be true or false."
@@ -66,8 +68,12 @@ PY
 done
 
 for key in "${SSH_KEYS[@]}"; do
-    [[ "$key" == *" "* ]] || { echo "Invalid SSH public key entry: $key"; exit 1; }
+    [[ "$key" == *" "* ]] || die "Invalid SSH public key entry: $key"
 done
+
+# ========================================
+# INSTALLATION TARGET
+# ========================================
 
 echo "========================================"
 echo "           SERVER BOOTSTRAP"
@@ -82,26 +88,25 @@ case "$TARGET_MODE" in
     1) INSTALL_TARGET="local" ;;
     2) INSTALL_TARGET="remote" ;;
     0) exit 0 ;;
-    *) log "Invalid selection."; exit 1 ;;
+    *) die "Invalid selection." ;;
 esac
 
 APPLY_MODE="full"
 
+# ========================================
+# DOMAIN AND CERTIFICATE
+# ========================================
+
 DOMAIN=""
 CERT_SOURCE_FULLCHAIN=""
 CERT_SOURCE_KEY=""
-
-CERT_METHOD="existing"
-CERTBOT_EMAIL=""
 CERT_IS_WILDCARD="false"
-CERT_REMOTE_SELECT="false"
 
 read -r -p "Domain: " DOMAIN
 DOMAIN="${DOMAIN,,}"
 
 if [[ ! "$DOMAIN" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
-    log "Invalid domain: $DOMAIN"
-    exit 1
+    die "Invalid domain: $DOMAIN"
 fi
 
 # Check whether the configured certificate is a wildcard
@@ -127,59 +132,19 @@ if [[ "$SSL_USE_EXISTING" == "true" && -n "$SSL_FULLCHAIN" ]]; then
     )
 fi
 
+# ========================================
+# TARGET PREPARATION
+# ========================================
+
 HOST_IPV4=""
 HOST_IPV6=""
-SSH_CLIENT_IP=""
 
-if [[ "$INSTALL_TARGET" == "local" ]]; then
-    if [[ -n "${SSH_CONNECTION:-}" ]]; then
-        read -r SSH_CLIENT_IP _ <<< "$SSH_CONNECTION"
-        if [[ "$SSH_CLIENT_IP" == *:* ]]; then
-            HOST_IPV6="$SSH_CLIENT_IP"
-        else
-            HOST_IPV4="$SSH_CLIENT_IP"
-        fi
-    elif [[ "$SSH_ALL" == "false" ]]; then
-        read -r -p "SSH client IP (SSH_CONNECTION unavailable): " SSH_CLIENT_IP
-        python3 - "$SSH_CLIENT_IP" <<'PY'
-import ipaddress, sys
-try:
-    ipaddress.ip_address(sys.argv[1])
-except ValueError:
-    print("Invalid IP address.")
-    sys.exit(1)
-PY
-        if [[ "$SSH_CLIENT_IP" == *:* ]]; then HOST_IPV6="$SSH_CLIENT_IP"; else HOST_IPV4="$SSH_CLIENT_IP"; fi
-    fi
-else
-    echo
-    read -r -p "Target IP: " TARGET_IP
-    read -r -p "SSH user: " SSH_USER
-    read -r -s -p "SSH password: " SSH_PASSWORD
-    echo
+source "$SCRIPT_DIR/targets/$INSTALL_TARGET.sh"
+prepare_target
 
-    python3 - "$TARGET_IP" <<'PY'
-import ipaddress, sys
-try:
-    ipaddress.ip_address(sys.argv[1])
-except ValueError:
-    print("Invalid target IP address.")
-    sys.exit(1)
-PY
-    [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$ ]] || { echo "Invalid SSH username."; exit 1; }
-
-    HOST_IPV4="$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]}' | python3 -c 'import sys,ipaddress; [print(x) for x in sys.stdin if (lambda a: a.is_global)(ipaddress.ip_address(x.strip()))]' | head -n1)"
-    HOST_IPV6="$(ip -6 -o addr show scope global | awk '!/temporary|deprecated|tentative|dadfailed/ {split($4,a,"/"); print a[1]}' | python3 -c 'import sys,ipaddress; [print(x) for x in sys.stdin if (lambda a: a.version == 6 and a.is_global)(ipaddress.ip_address(x.strip()))]' | head -n1)"
-
-    if [[ "$SSH_ALL" == "false" && -z "$HOST_IPV4" && -z "$HOST_IPV6" && ${#SSH_EXTRA_IPS[@]} -eq 0 ]]; then
-        log "ERROR: No SSH allowed IP addresses configured."
-        exit 1
-    fi
-fi
-
-if [[ "$INSTALL_TARGET" == "local" ]]; then
-    [[ $EUID -eq 0 ]] || { log "Run local installation as root: sudo bash setup.sh"; exit 1; }
-fi
+# ========================================
+# CONFIRMATION
+# ========================================
 
 echo
 echo "----------------------------------------"
@@ -189,6 +154,7 @@ echo "Mode:         $APPLY_MODE"
 [[ -n "$DOMAIN" ]] && echo "Domain:       $DOMAIN"
 echo "SSH_ALL:      $SSH_ALL"
 echo "----------------------------------------"
+
 read -r -p "Continue? [y/N]: " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 
@@ -203,60 +169,4 @@ ARGS=(
     "$CERT_SOURCE_KEY"
 )
 
-if [[ "$INSTALL_TARGET" == "local" ]]; then
-    bash "$SCRIPT_DIR/modules/apply.sh" "${ARGS[@]}"
-    exit $?
-fi
-
-ensure_dependencies openssh-client sshpass
-
-SSH_OPTS=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new)
-SSH_DEST="${SSH_USER}@${TARGET_IP}"
-SCP_DEST="$SSH_DEST"
-[[ "$TARGET_IP" == *:* ]] && SCP_DEST="${SSH_USER}@[$TARGET_IP]"
-export SSHPASS="$SSH_PASSWORD"
-unset SSH_PASSWORD
-
-REMOTE_DIR=""
-LOCAL_TMP="$(mktemp -d)"
-cleanup() {
-    if [[ -n "$REMOTE_DIR" ]]; then
-        sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "rm -rf -- '$REMOTE_DIR'" >/dev/null 2>&1 || true
-    fi
-    rm -rf "$LOCAL_TMP"
-    unset SSHPASS
-}
-trap cleanup EXIT
-
-check_ssh_connection
-REMOTE_DIR="$(sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" 'mktemp -d /tmp/server-bootstrap.XXXXXX')"
-
-tar -czf "$LOCAL_TMP/modules.tar.gz" -C "$SCRIPT_DIR" config.conf modules templates scripts
-sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_TMP/modules.tar.gz" "$SCP_DEST:$REMOTE_DIR/"
-if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
-    sshpass -e scp "${SSH_OPTS[@]}" "$CERT_SOURCE_FULLCHAIN" "$SCP_DEST:$REMOTE_DIR/fullchain.pem"
-    sshpass -e scp "${SSH_OPTS[@]}" "$CERT_SOURCE_KEY" "$SCP_DEST:$REMOTE_DIR/privkey.pem"
-fi
-
-REMOTE_ARGS_ESCAPED=""
-
-for arg in "${ARGS[@]}"; do
-    printf -v q '%q' "$arg"
-    REMOTE_ARGS_ESCAPED+=" $q"
-done
-
-REMOTE_COMMAND="mkdir -p '$REMOTE_DIR/package' && tar -xzf '$REMOTE_DIR/modules.tar.gz' -C '$REMOTE_DIR/package' && bash '$REMOTE_DIR/package/modules/apply.sh'$REMOTE_ARGS_ESCAPED"
-
-if sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "id -u | grep -qx 0"; then
-    sshpass -e ssh -tt "${SSH_OPTS[@]}" "$SSH_DEST" "$REMOTE_COMMAND"
-else
-    sshpass -e ssh -tt "${SSH_OPTS[@]}" "$SSH_DEST" \
-        "sudo -S -p '' bash -c $(printf '%q' "$REMOTE_COMMAND")"
-fi
-
-echo
-echo "========================================"
-echo " BOOTSTRAP COMPLETED"
-echo " Server: $TARGET_IP"
-[[ -n "$DOMAIN" ]] && echo " Domain: $DOMAIN"
-echo "========================================"
+run_target
