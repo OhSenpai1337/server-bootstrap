@@ -155,6 +155,11 @@ EOF
         /etc/nginx/sites-enabled \
         /var/www/html
 
+    if [[ ! -f /var/www/html/index.html ]]; then
+        cp "$SCRIPT_DIR/templates/index.html" /var/www/html/index.html
+        chown www-data:www-data /var/www/html/index.html
+    fi    
+
     install -m 0644 "$TEMPLATES_DIR/nginx.conf" /etc/nginx/nginx.conf
 
     install -m 644 "$TEMPLATES_DIR/common-site.conf" \

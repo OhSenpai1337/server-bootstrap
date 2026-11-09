@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#0b0e11">
+    <title>Nginx - Server Online</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: #0b0e11;
+            color: #e8edf2;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Roboto, sans-serif;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 680px;
+            text-align: center;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding: 8px 14px;
+            margin-bottom: 34px;
+            border: 1px solid #263b32;
+            border-radius: 30px;
+            background: #111c17;
+            color: #83d6a5;
+            font-size: 12px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .status::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #48d18a;
+            box-shadow: 0 0 12px #48d18a;
+        }
+
+        h1 {
+            margin-bottom: 18px;
+            font-size: clamp(42px, 9vw, 76px);
+            font-weight: 700;
+            letter-spacing: -4px;
+        }
+
+        h1 span {
+            color: #48d18a;
+        }
+
+        .description {
+            color: #89939e;
+            font-size: 16px;
+            line-height: 1.8;
+        }
+
+        .divider {
+            width: 48px;
+            height: 2px;
+            margin: 38px auto;
+            background: #48d18a;
+            opacity: 0.7;
+        }
+
+        .server {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: #65717d;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        .server svg {
+            width: 17px;
+            height: 17px;
+            stroke: #48d18a;
+        }
+
+        footer {
+            margin-top: 90px;
+            color: #424c56;
+            font-size: 12px;
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                letter-spacing: -2px;
+            }
+
+            footer {
+                margin-top: 65px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <div class="status">System operational</div>
+
+        <h1>It works<span>.</span></h1>
+
+        <p class="description">
+            Этот сайт работает на Nginx.<br>
+            Веб-сервер запущен и готов принимать запросы.
+        </p>
+
+        <div class="divider"></div>
+
+        <div class="server">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke-width="1.7" stroke-linecap="round"
+                 stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="7" rx="2"/>
+                <rect x="3" y="14" width="18" height="7" rx="2"/>
+                <path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>
+            </svg>
+            POWERED BY NGINX
+        </div>
+
+        <footer>
+            &copy; <span id="year"></span> All systems operational.
+        </footer>
+    </main>
+
+    <script>
+        document.getElementById("year").textContent =
+            new Date().getFullYear();
+    </script>
+</body>
+</html>
