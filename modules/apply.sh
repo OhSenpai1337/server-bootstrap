@@ -29,6 +29,8 @@ CERT_SOURCE_KEY="${8:-}"
 
 CERT_METHOD=""
 CERTBOT_EMAIL=""
+LE_CERT_DIR=""
+search_cerbot_cert
 
 if [[ "$INSTALL_MODE" == "remote" && "$CERT_IS_WILDCARD" == "true" ]]; then
     CERT_SOURCE_FULLCHAIN="$SCRIPT_DIR/../fullchain.pem"
@@ -64,18 +66,32 @@ if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
     check_domain_ip "$DOMAIN" "$(get_public_ipv4)"
 
     # Select certificate method.
-    if [[ "$SSL_USE_EXISTING" == "false" ]]; then
+    
+    if [[ "$CERT_IS_WILDCARD" == "true" ]]; then
+        CERT_METHOD="existing"
+
+        log "Using configured wildcard certificate."
+    elif [[ -n "$LE_CERT_DIR" ]]; then
+        CERT_METHOD="existing"
+        CERT_SOURCE_FULLCHAIN="$LE_CERT_DIR/fullchain.pem"
+        CERT_SOURCE_KEY="$LE_CERT_DIR/privkey.pem"
+
+        log "Using existing Let's Encrypt certificate: $LE_CERT_DIR"  
+    elif [[ "$SSL_USE_EXISTING" == "false" ]]; then
         CERT_METHOD="certbot"
 
         read -r -p "Let's Encrypt email: " CERTBOT_EMAIL
 
         [[ "$CERTBOT_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die "Invalid email address."
-
-    elif [[ "$CERT_IS_WILDCARD" == "true" ]]; then
+    elif [[ "$INSTALL_MODE" == "local" && "$SSL_USE_EXISTING" == "true" && -n "$SSL_FULLCHAIN" && -n "$SSL_PRIVKEY" ]]; then
         CERT_METHOD="existing"
+        CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
+        CERT_SOURCE_KEY="$SSL_PRIVKEY"
 
-        log "Using configured wildcard certificate."
+        [[ "$CERT_SOURCE_FULLCHAIN" == /* ]] || CERT_SOURCE_FULLCHAIN="$SCRIPT_DIR/$CERT_SOURCE_FULLCHAIN"
+        [[ "$CERT_SOURCE_KEY" == /* ]] || CERT_SOURCE_KEY="$SCRIPT_DIR/$CERT_SOURCE_KEY"
 
+        log "Using configured certificate."  
     else
         echo
         echo "Certificate configuration:"
@@ -87,17 +103,8 @@ if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
             1)
                 CERT_METHOD="existing"
 
-                # Use configured paths on local installation.
-                if [[ "$INSTALL_MODE" == "local" && -n "$SSL_FULLCHAIN" ]]; then
-                    CERT_SOURCE_FULLCHAIN="$SSL_FULLCHAIN"
-                    CERT_SOURCE_KEY="$SSL_PRIVKEY"
-
-                    [[ "$CERT_SOURCE_FULLCHAIN" == /* ]] || CERT_SOURCE_FULLCHAIN="$SCRIPT_DIR/$CERT_SOURCE_FULLCHAIN"
-                    [[ "$CERT_SOURCE_KEY" == /* ]] || CERT_SOURCE_KEY="$SCRIPT_DIR/$CERT_SOURCE_KEY"
-                else
-                    read -r -p "Fullchain certificate path: " CERT_SOURCE_FULLCHAIN
-                    read -r -p "Private key path: " CERT_SOURCE_KEY
-                fi
+                read -r -p "Fullchain certificate path: " CERT_SOURCE_FULLCHAIN
+                read -r -p "Private key path: " CERT_SOURCE_KEY
                 ;;
 
             2)

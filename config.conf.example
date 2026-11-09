@@ -40,6 +40,8 @@ SSH_KEYS=(
 # ========================================
 
 # Use existing SSL certificates instead of requesting new ones via Certbot.
+# When enabled, the installer can use the configured certificate paths (Local mode).
+# Existing Let's Encrypt certificates are checked automatically before requesting a new one.
 SSL_USE_EXISTING=true
 
 # Path to the SSL certificate chain (fullchain).
@@ -58,8 +60,6 @@ SSL_PRIVKEY="/path/to/privkey.pem"
 # STANDARD - https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh
 # PURE     - https://raw.githubusercontent.com/vermiliondevil-web/pure-3x-ui/main/install.sh
 XUI_INSTALL_URL="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
-
-# CHANGE IT, THERE IS NO CHECK FOR DUMMIES :)
 
 # Web panel port.
 XUI_PANEL_PORT=8080

@@ -83,6 +83,24 @@ get_public_ipv6() {
     curl -6fsS --max-time 10 https://api6.ipify.org 2>/dev/null || true
 }
 
+search_cerbot_cert() {
+    for cert_dir in "/etc/letsencrypt/live/$DOMAIN" /etc/letsencrypt/live/"$DOMAIN"-*; do
+        [[ -s "$cert_dir/fullchain.pem" && -s "$cert_dir/privkey.pem" ]] || continue
+
+        openssl x509 -in "$cert_dir/fullchain.pem" -noout -checkhost "$DOMAIN" &>/dev/null || continue
+        openssl x509 -in "$cert_dir/fullchain.pem" -noout -checkend 0 &>/dev/null || continue
+
+        if ! cmp -s \
+            <(openssl x509 -in "$cert_dir/fullchain.pem" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null) \
+            <(openssl pkey -in "$cert_dir/privkey.pem" -pubout -outform DER 2>/dev/null); then
+            continue
+        fi
+
+        LE_CERT_DIR="$cert_dir"
+        break
+    done
+}
+
 # ========================================
 # DEPENDENCY CHECKS
 # ========================================

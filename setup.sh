@@ -42,6 +42,12 @@ source "$CONFIG_FILE"
 : "${SSL_USE_EXISTING:=true}"
 [[ "$SSL_USE_EXISTING" =~ ^(true|false)$ ]] || die "SSL_USE_EXISTING must be true or false."
 
+# Validate URL paths.
+[[ -n "$XUI_WEB_BASE_PATH" && "$XUI_WEB_BASE_PATH" != "/PATH_TO_YOUR_PANEL/" ]] || die "XUI_WEB_BASE_PATH is empty or has its default value."
+[[ -n "$XUI_VLESS_WS_PATH" && "$XUI_VLESS_WS_PATH" != "/VLESS_WS_PATH/" ]] || die "XUI_VLESS_WS_PATH is empty or has its default value."
+[[ -n "$XUI_SUB_PATH" && "$XUI_SUB_PATH" != "/SUB_PATH/" ]] || die "XUI_SUB_PATH is empty or has its default value."
+[[ -n "$XUI_SUB_CLASH_PATH" && "$XUI_SUB_CLASH_PATH" != "/SUB_CLASH_PATH/" ]] || die "XUI_SUB_CLASH_PATH is empty or has its default value."
+
 if [[ "$SSL_USE_EXISTING" == "true" && -n "$SSL_FULLCHAIN" && -n "$SSL_PRIVKEY" ]]; then
     SSL_FULLCHAIN="${SSL_FULLCHAIN/#\~/$HOME}"
     SSL_PRIVKEY="${SSL_PRIVKEY/#\~/$HOME}"
