@@ -6,14 +6,8 @@ install_nginx() {
     local NGINX_CERT_KEY=""
     local CERT_TMP_DIR=""
 
-    [[ -n "$DOMAIN" ]] || {
-        echo "ERROR: Domain is required for Nginx."
-        return 1
-    }
-
     if [[ "$XUI_SUBSCRIPTION" == "false" && "$NGINX_SUBSCRIPTION" == "true" ]]; then
-        log "NGINX_SUBSCRIPTION cannot be enabled when XUI_SUBSCRIPTION is disabled."
-        exit 1
+        die "NGINX_SUBSCRIPTION cannot be enabled when XUI_SUBSCRIPTION is disabled."
     fi
 
     local ports=("$XUI_PANEL_PORT")
@@ -21,8 +15,7 @@ install_nginx() {
 
     for port in "${ports[@]}"; do
         [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || {
-            echo "ERROR: Invalid port: $port"
-            return 1
+            die "Invalid port: $port"
         }
     done
 
@@ -100,16 +93,14 @@ EOF
             -d "$DOMAIN"; then
 
             systemctl start nginx || true
-            echo "ERROR: Certbot certificate issuance failed."
-            return 1
+            die "Certbot certificate issuance failed."
         fi
 
         CERT_SOURCE_FULLCHAIN="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
         CERT_SOURCE_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
 
     elif [[ "$CERT_METHOD" != "existing" ]]; then
-        echo "ERROR: Invalid certificate method: $CERT_METHOD"
-        return 1
+        die "Invalid certificate method: $CERT_METHOD"
     fi
 
     # Select certificate paths.
@@ -131,40 +122,28 @@ EOF
     fi
 
     # Validate selected certificate and private key.
-    [[ -s "$NGINX_CERT_FULLCHAIN" ]] || {
-        echo "ERROR: Certificate not found: $NGINX_CERT_FULLCHAIN"
-        return 1
-    }
+    [[ -s "$NGINX_CERT_FULLCHAIN" ]] || die "Certificate not found: $NGINX_CERT_FULLCHAIN"
+    [[ -s "$NGINX_CERT_KEY" ]] || die "Private key not found: $NGINX_CERT_KEY"
 
-    [[ -s "$NGINX_CERT_KEY" ]] || {
-        echo "ERROR: Private key not found: $NGINX_CERT_KEY"
-        return 1
-    }
-
-    if ! openssl x509 -in "$NGINX_CERT_FULLCHAIN" -noout -checkhost "$DOMAIN"; then
-        echo "ERROR: Certificate does not cover $DOMAIN."
-        return 1
-    fi
+    openssl x509 -in "$NGINX_CERT_FULLCHAIN" -noout -checkhost "$DOMAIN" ||
+        die "Certificate does not cover $DOMAIN."
 
     CERT_TMP_DIR="$(mktemp -d)"
 
     if ! openssl x509 -in "$NGINX_CERT_FULLCHAIN" -pubkey -noout |
         openssl pkey -pubin -outform DER > "$CERT_TMP_DIR/cert.pub"; then
         rm -rf "$CERT_TMP_DIR"
-        echo "ERROR: Could not read certificate public key."
-        return 1
+        die "Could not read certificate public key."
     fi
 
     if ! openssl pkey -in "$NGINX_CERT_KEY" -pubout -outform DER > "$CERT_TMP_DIR/key.pub"; then
         rm -rf "$CERT_TMP_DIR"
-        echo "ERROR: Could not read private key."
-        return 1
+        die "Could not read private key."
     fi
 
     if ! cmp -s "$CERT_TMP_DIR/cert.pub" "$CERT_TMP_DIR/key.pub"; then
         rm -rf "$CERT_TMP_DIR"
-        echo "ERROR: Certificate and private key do not match."
-        return 1
+        die "Certificate and private key do not match."
     fi
 
     rm -rf "$CERT_TMP_DIR"
@@ -219,8 +198,7 @@ EOF
             }
         }
     ' "$TEMPLATES_DIR/ssl.conf" > /etc/nginx/snippets/ssl.conf; then
-        echo "ERROR: Could not find certificate directives in ssl.conf."
-        return 1
+        die "Could not find certificate directives in ssl.conf."
     fi
 
     # Generate sub.conf with configured subscription port.

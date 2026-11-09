@@ -2,41 +2,92 @@
 # SERVER BOOTSTRAP CONFIGURATION
 # ========================================
 
+# ========================================
+# SYSTEM
+# ========================================
+
+# Update system packages before installation.
+UPDATE_SYSTEM=false
+
+
+# ========================================
+# SSH & ACCESS CONTROL
+# ========================================
+
 # Additional IP addresses allowed to connect via SSH.
 SSH_EXTRA_IPS=(
-    # IPs
+    # "192.0.2.10"
 )
 
-# Allow SSH from any IP.
+# Allow SSH connections from any IP address.
 SSH_ALL=false
 
-# SSH public keys added to /root/.ssh/authorized_keys.
+# Enable installation of SSH public keys.
+USE_SSH_KEYS=true
+
+# Disable password authentication and allow SSH access only via keys.
+# Requires at least one key in SSH_KEYS.
+SSH_KEY_ONLY=false
+
+# SSH public keys to add to /root/.ssh/authorized_keys.
 SSH_KEYS=(
-    # Add your public SSH keys here
+    # "ssh-ed25519 AAAA..."
 )
 
-# SSL certificate paths
+
+# ========================================
+# SSL / TLS
+# ========================================
+
+# Use existing SSL certificates instead of requesting new ones via Certbot.
 SSL_USE_EXISTING=true
+
+# Path to the SSL certificate chain (fullchain).
 SSL_FULLCHAIN="/path/to/fullchain.pem"
+
+# Path to the SSL private key.
 SSL_PRIVKEY="/path/to/privkey.pem"
 
-# 3x-ui installation script URL:
-# Available sources:
+
+# ========================================
+# 3X-UI
+# ========================================
+
+# URL of the 3x-ui installation script or a compatible fork.
+# Tested:
 # STANDARD - https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh
 # PURE     - https://raw.githubusercontent.com/vermiliondevil-web/pure-3x-ui/main/install.sh
 XUI_INSTALL_URL="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
 
 # CHANGE IT, THERE IS NO CHECK FOR DUMMIES :)
+
+# Web panel port.
 XUI_PANEL_PORT=8080
+
+# Web panel URL path. Change the default value for security.
 XUI_WEB_BASE_PATH="/PATH_TO_YOUR_PANEL/"
+
+# VLESS WebSocket connection path.
 XUI_VLESS_WS_PATH="/VLESS_WS_PATH/"
 
-XUI_SUBSCRIPTION=true 
+# Enable the 3x-ui subscription service.
+XUI_SUBSCRIPTION=true
+
+# Configure Nginx as a reverse proxy for the subscription service.
 NGINX_SUBSCRIPTION=true
+
+# Subscription service port.
 XUI_SUBSCRIPTION_PORT=465
+
+# Standard subscription URL path.
 XUI_SUB_PATH="/SUB_PATH/"
+
+# Clash subscription URL path.
 XUI_SUB_CLASH_PATH="/SUB_CLASH_PATH/"
 
-# VLESS-WS, HYSTERIA2, TUICv5
+# Automatically create VLESS-WS, Hysteria2 and TUICv5 inbounds.
 XUI_CREATE_INBOUNDS=true
+
+# Automatically detect the server country and use it in inbound names.
+# When disabled, generic connection names are used instead.
 XUI_AUTODETECT_COUNTRY=true

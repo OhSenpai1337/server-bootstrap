@@ -39,14 +39,23 @@ echo "========================================"
 echo " Applying setup: $MODE"
 echo "========================================"
 
-update_system
+[[ "$UPDATE_SYSTEM" == "true" ]] && update_system
+
 ensure_dependencies curl
-install_ssh_keys
+
+if [[ "$USE_SSH_KEYS" == "true" && ${#SSH_KEYS[@]} -gt 0 ]]; then
+    install_ssh_keys
+
+    if [[ "$SSH_KEY_ONLY" == "true" ]]; then
+        configure_ssh_key_only
+    fi
+elif [[ "$USE_SSH_KEYS" == "true" && "$SSH_KEY_ONLY" == "true" ]]; then
+    echo "ERROR: SSH_KEY_ONLY=true requires SSH_KEYS."
+    exit 1
+fi
 
 # Configure UFW before Nginx and Certbot.
-if [[ "$MODE" == "full" || "$MODE" == "ufw" ]]; then
-    install_ufw
-fi
+[[ "$MODE" == "full" || "$MODE" == "ufw" ]] && install_ufw
 
 if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
     [[ -n "$DOMAIN" ]] || die "Domain is required for Nginx."

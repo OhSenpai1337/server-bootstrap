@@ -11,6 +11,7 @@ cert_file = os.environ["CERT_FILE"]
 key_file = os.environ["KEY_FILE"]
 vless_ws_path = os.environ["XUI_VLESS_WS_PATH"]
 hysteria_password = os.environ["HYSTERIA_PASSWORD"]
+autodetect_country = os.environ["XUI_AUTODETECT_COUNTRY"]
 server_country = os.environ.get("SERVER_COUNTRY", "Unknown")
 
 def encode(value):
@@ -168,7 +169,7 @@ try:
 
     # 1. VLESS + WS
     vless_id = add_inbound(
-        remark=f"{server_country} (WS)",
+        remark=f"{server_country} (WS)" if autodetect_country == "true" else "VLESS (WS)",
         tag="in-8888-tcp",
         listen="127.0.0.1",
         port=8888,
@@ -180,7 +181,7 @@ try:
 
     # 2. Hysteria 2
     hysteria_id = add_inbound(
-        remark=f"{server_country} (Hysteria)",
+        remark=f"{server_country} (Hysteria)" if autodetect_country == "true" else "Hysteria",
         tag="in-443-udp",
         listen="",
         port=443,
@@ -192,7 +193,7 @@ try:
 
     # 3. TUIC
     tuic_id = add_inbound(
-        remark=f"{server_country} (TUIC)",
+        remark=f"{server_country} (TUIC)" if autodetect_country == "true" else "TUIC",
         tag="in-8443-udp",
         listen="",
         port=8443,

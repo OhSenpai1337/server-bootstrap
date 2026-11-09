@@ -11,7 +11,7 @@ check_system() {
 }
 
 update_system() {
-    log "[1/2] Updating..."
+    log "Updating"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get upgrade -y
@@ -19,7 +19,7 @@ update_system() {
 
 install_ssh_keys() {
     local key
-    log "[2/2] Installing SSH authorized keys..."
+    log "Installing SSH authorized keys"
     install -d -o root -g root -m 0700 /root/.ssh
     touch /root/.ssh/authorized_keys
     chown root:root /root/.ssh/authorized_keys
@@ -33,6 +33,21 @@ install_ssh_keys() {
             log "Already exists: ${key##* }"
         fi
     done
+}
+
+configure_ssh_key_only() {
+    [[ "$SSH_KEY_ONLY" != "true" ]] && return 0
+
+    [[ ${#SSH_KEYS[@]} -gt 0 ]] || {
+        echo "ERROR: SSH_KEY_ONLY=true requires at least one SSH key in SSH_KEYS."
+        exit 1
+    }
+
+    sed -i 's/^[#[:space:]]*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+    sed -i 's/^[#[:space:]]*KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+    sed -i 's/^[#[:space:]]*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+
+    sshd -t && systemctl reload ssh
 }
 
 log() {

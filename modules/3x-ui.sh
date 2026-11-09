@@ -49,8 +49,7 @@ install_3x_ui() {
 
     for port in "${ports[@]}"; do
         [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || {
-            echo "ERROR: Invalid port: $port"
-            return 1
+            die "ERROR: Invalid port: $port"
         }
     done
 
@@ -116,9 +115,11 @@ install_3x_ui() {
     # GET COUNTRY
     # ========================================
 
-    SERVER_COUNTRY="$(python3 "$SCRIPT_DIR/scripts/get_country.py")"
-    log "Server location: $SERVER_COUNTRY"
-    export SERVER_COUNTRY
+    if [[ "$XUI_AUTODETECT_COUNTRY" == "true" ]]; then
+        SERVER_COUNTRY="$(python3 "$SCRIPT_DIR/scripts/get_country.py")"
+        log "Server location: $SERVER_COUNTRY"
+        export SERVER_COUNTRY
+    fi
 
     # ========================================
     # DOWNLOAD INSTALLER
@@ -300,6 +301,7 @@ install_3x_ui() {
             KEY_FILE="$KEY_FILE" \
             XUI_VLESS_WS_PATH="$XUI_VLESS_WS_PATH" \
             HYSTERIA_PASSWORD="$HYSTERIA_PASSWORD" \
+            XUI_AUTODETECT_COUNTRY="$XUI_AUTODETECT_COUNTRY" \
             SERVER_COUNTRY="$SERVER_COUNTRY" \
             python3 "$SCRIPT_DIR/scripts/create_inbounds.py"; then
 

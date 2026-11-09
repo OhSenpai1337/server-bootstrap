@@ -33,8 +33,7 @@ install_ufw() {
         done
 
         if [[ -z "$HOST_IPV4" && -z "$HOST_IPV6" && ${#SSH_EXTRA_IPS[@]} -eq 0 ]]; then
-            echo "ERROR: No SSH allow-list entries. Refusing to enable UFW."
-            return 1
+            die "ERROR: No SSH allow-list entries. Refusing to enable UFW."
         fi
     fi
 
