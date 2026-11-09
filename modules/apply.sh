@@ -39,6 +39,9 @@ echo "========================================"
 echo " Applying setup: $MODE"
 echo "========================================"
 
+[[ -n "$DOMAIN" ]] || die "Domain is required."
+hostnamectl set-hostname "$DOMAIN"
+
 [[ "$UPDATE_SYSTEM" == "true" ]] && update_system
 
 ensure_dependencies curl
@@ -58,8 +61,6 @@ fi
 [[ "$MODE" == "full" || "$MODE" == "ufw" ]] && install_ufw
 
 if [[ "$MODE" == "full" || "$MODE" == "nginx" ]]; then
-    [[ -n "$DOMAIN" ]] || die "Domain is required for Nginx."
-
     check_domain_ip "$DOMAIN" "$(get_public_ipv4)"
 
     # Select certificate method.
