@@ -6,6 +6,7 @@
 
 # Configuration files
 *.conf text eol=lf
+*.conf.example text eol=lf
 
 # Nginx templates
 *.conf.template text eol=lf
