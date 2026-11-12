@@ -73,6 +73,9 @@ XUI_VLESS_WS_PATH="/VLESS_WS_PATH/"
 # Enable the 3x-ui subscription service.
 XUI_SUBSCRIPTION=true
 
+# https://github.com/hydraponique/roscomvpn-routing
+XUI_ROSCOMVPN_ROUTING_RULES=true
+
 # Configure Nginx as a reverse proxy for the subscription service.
 NGINX_SUBSCRIPTION=true
 

@@ -171,7 +171,7 @@ install_3x_ui() {
     # ========================================
     # DOWNLOAD ROUTING RULES
     # ========================================
-    if [[ "$XUI_SUBSCRIPTION" == "true" ]]; then
+    if [[ "$XUI_SUBSCRIPTION" == "true" && "$XUI_ROSCOMVPN_ROUTING_RULES" == "true" ]]; then
         log "Downloading routing rules..."
 
         HAPP_ROUTING_TMP="$(mktemp)"
@@ -254,20 +254,22 @@ install_3x_ui() {
             set_setting "subClashEnable" "true"
             set_setting "subClashAutoDetect" "true"
 
+            set_setting "subHappAutoDetect" "true"
+            set_setting "subIncyAppAutoDetect" "true"
+
             # Subscription URLs
             if [[ "$NGINX_SUBSCRIPTION" == "true" ]]; then
                 set_setting "subURI" "$SUB_URI"
                 set_setting "subClashURI" "$SUB_CLASH_URI"
             fi
 
-            # Routing
-            set_setting "subHappAutoDetect" "true"
-            set_setting "subEnableRouting" "true"
-            set_setting "subRoutingRules" "$HAPP_ROUTING_RULES"
+            if [[ "$XUI_ROSCOMVPN_ROUTING_RULES" == "true" ]]; then
+                set_setting "subEnableRouting" "true"
+                set_setting "subRoutingRules" "$HAPP_ROUTING_RULES"
 
-            set_setting "subIncyAppAutoDetect" "true"
-            set_setting "subIncyEnableRouting" "true"
-            set_setting "subIncyRoutingRules" "$INCY_ROUTING_RULES"
+                set_setting "subIncyEnableRouting" "true"
+                set_setting "subIncyRoutingRules" "$INCY_ROUTING_RULES"
+            fi
 
             # Remark template
             set_setting "remarkTemplate" '{{INBOUND}}|📊{{TRAFFIC_LEFT}}|⏳{{DAYS_LEFT}}D'
