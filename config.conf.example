@@ -20,7 +20,7 @@ SSH_EXTRA_IPS=(
 )
 
 # Allow SSH connections from any IP address.
-SSH_ALL=false
+SSH_ALL=true
 
 # Enable installation of SSH public keys.
 USE_SSH_KEYS=true
