@@ -66,7 +66,7 @@ check_domain_ip() {
 
     [[ -n "$ipv4" ]] || die "Server IPv4 is not specified."
 
-    mapfile -t dns_ipv4 < <(getent ahostsv4 "$domain" | awk '{print $1}' | sort -u)
+    mapfile -t dns_ipv4 < <(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
 
     printf '%s\n' "${dns_ipv4[@]}" | grep -Fxq "$ipv4" || {
         die "Domain $domain does not resolve to server IPv4 $ipv4."
