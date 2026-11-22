@@ -88,7 +88,7 @@ XUI_SUB_PATH="/SUB_PATH/"
 # Clash subscription URL path.
 XUI_SUB_CLASH_PATH="/SUB_CLASH_PATH/"
 
-# Automatically create VLESS-WS, Hysteria2 and TUICv5 inbounds.
+# Automatically create VLESS-XHTTP, Hysteria2 and TUICv5 inbounds.
 XUI_CREATE_INBOUNDS=true
 
 # Automatically detect the server country and use it in inbound names.

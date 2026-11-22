@@ -41,7 +41,7 @@ Server Bootstrap - Bash-скрипт для автоматизации уста�
 
 | Протокол | Транспорт | Защита |
 |---|---|---|
-| VLESS | WebSocket | TLS |
+| VLESS | XHTTP | TLS |
 | Hysteria2 | UDP | TLS |
 | TUIC v5 | UDP | TLS |
 
@@ -126,14 +126,14 @@ sudo bash setup.sh
 | `XUI_INSTALL_URL` | `mhsanaei/3x-ui` | URL установочного скрипта 3x-ui или совместимого форка. |
 | `XUI_PANEL_PORT` | `8080` | Порт веб-панели 3x-ui. |
 | `XUI_WEB_BASE_PATH` | `/PATH_TO_YOUR_PANEL/` | URL-путь веб-панели. Рекомендуется изменить стандартное значение в целях безопасности. |
-| `XUI_VLESS_WS_PATH` | `/VLESS_WS_PATH/` | URL-путь для VLESS WebSocket-подключений. |
+| `XUI_VLESS_WS_PATH` | `/VLESS_WS_PATH/` | URL-путь для VLESS XHTTP-подключений. |
 | `XUI_SUBSCRIPTION` | `true` | Включить сервис подписок 3x-ui. |
 | `XUI_ROSCOMVPN_ROUTING_RULES` | `true` | Включить правила маршрутизации RoscomVPN. |
 | `NGINX_SUBSCRIPTION` | `true` | Настроить Nginx в качестве обратного прокси для сервиса подписок. |
 | `XUI_SUBSCRIPTION_PORT` | `465` | Порт сервиса подписок. |
 | `XUI_SUB_PATH` | `/SUB_PATH/` | URL-путь стандартной подписки. |
 | `XUI_SUB_CLASH_PATH` | `/SUB_CLASH_PATH/` | URL-путь подписки Clash. |
-| `XUI_CREATE_INBOUNDS` | `true` | Автоматически создавать подключения VLESS-WS, Hysteria2 и TUICv5. |
+| `XUI_CREATE_INBOUNDS` | `true` | Автоматически создавать подключения VLESS-XHTTP, Hysteria2 и TUICv5. |
 | `XUI_AUTODETECT_COUNTRY` | `true` | Автоматически определять страну расположения сервера и использовать её в названиях подключений. При отключении используются стандартные названия. |
 
 **Проверенные установочные скрипты:**

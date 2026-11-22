@@ -176,10 +176,10 @@ EOF
     if [[ "$XUI_CREATE_INBOUNDS" == "true" ]]; then
         sed \
             -e "s|__VLESS_WS_PATH__|$XUI_VLESS_WS_PATH|g" \
-            "$TEMPLATES_DIR/ws.conf" \
-            > /etc/nginx/snippets/ws.conf
+            "$TEMPLATES_DIR/xhttp.conf" \
+            > /etc/nginx/snippets/xhttp.conf
     else
-        rm -f /etc/nginx/snippets/ws.conf
+        rm -f /etc/nginx/snippets/xhttp.conf
     fi    
 
     # Generate SSL snippet with selected certificate paths.
@@ -242,7 +242,7 @@ server {
     include /etc/nginx/snippets/3x-ui.conf;
 EOF
 
-    [[ "$XUI_CREATE_INBOUNDS" == "true" ]] && printf '    include /etc/nginx/snippets/ws.conf;\n' >> /etc/nginx/sites-available/default
+    [[ "$XUI_CREATE_INBOUNDS" == "true" ]] && printf '    include /etc/nginx/snippets/xhttp.conf;\n' >> /etc/nginx/sites-available/default
     [[ "$NGINX_SUBSCRIPTION" == "true" ]] && printf '    include /etc/nginx/snippets/sub.conf;\n' >> /etc/nginx/sites-available/default
 
     cat >> /etc/nginx/sites-available/default <<'EOF'

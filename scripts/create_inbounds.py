@@ -20,7 +20,7 @@ def encode(value):
 
 sniffing = {
     "enabled": True,
-    "destOverride": ["http", "tls", "quic", "fakedns"]
+    "destOverride": ["http", "tls", "quic"]
 }
 
 # VLESS + WebSocket
@@ -32,15 +32,61 @@ vless_settings = {
 }
 
 vless_stream = {
-    "network": "ws",
-    "wsSettings": {
-        "acceptProxyProtocol": False,
-        "path": vless_ws_path,
-        "host": "",
-        "headers": {},
-        "heartbeatPeriod": 0
+    "network": "xhttp",
+    "xhttpSettings": {
+      "path": vless_ws_path,
+      "host": "",
+      "mode": "stream-up",
+      "xPaddingBytes": "100-1000",
+      "xPaddingObfsMode": False,
+      "xPaddingKey": "",
+      "xPaddingHeader": "",
+      "xPaddingPlacement": "",
+      "xPaddingMethod": "",
+      "sessionIDPlacement": "",
+      "sessionIDKey": "",
+      "sessionIDTable": "",
+      "sessionIDLength": "",
+      "seqPlacement": "",
+      "seqKey": "",
+      "uplinkDataPlacement": "",
+      "uplinkDataKey": "",
+      "scMaxEachPostBytes": "",
+      "noSSEHeader": False,
+      "scMaxBufferedPosts": 30,
+      "scStreamUpServerSecs": "20-80",
+      "serverMaxHeaderBytes": 0,
+      "uplinkHTTPMethod": "",
+      "headers": {},
+      "scMinPostsIntervalMs": "",
+      "uplinkChunkSize": 0,
+      "noGRPCHeader": False,
+      "enableXmux": False
     },
-    "security": "none"
+    "security": "none",
+    "sockopt": {
+      "tcpcongestion": "bbr",
+      "trustedXForwardedFor": [
+        "X-Forwarded-For"
+      ],
+      "acceptProxyProtocol": False,
+      "tcpFastOpen": False,
+      "mark": 0,
+      "tproxy": "off",
+      "tcpMptcp": False,
+      "penetrate": False,
+      "domainStrategy": "AsIs",
+      "tcpMaxSeg": 0,
+      "dialerProxy": "",
+      "tcpKeepAliveInterval": 0,
+      "tcpKeepAliveIdle": 0,
+      "tcpUserTimeout": 0,
+      "V6Only": False,
+      "tcpWindowClamp": 0,
+      "interface": "",
+      "addressPortStrategy": "none",
+      "customSockopt": []
+    }
 }
 
 # Hysteria 2
@@ -169,7 +215,7 @@ try:
 
     # 1. VLESS + WS
     vless_id = add_inbound(
-        remark=f"{server_country} (WS)" if autodetect_country == "true" else "VLESS (WS)",
+        remark=f"{server_country} (XHTTP)" if autodetect_country == "true" else "VLESS (XHTTP)",
         tag="in-8888-tcp",
         listen="127.0.0.1",
         port=8888,
@@ -235,7 +281,7 @@ try:
         secrets.token_hex(8),
         vless_id,
         0,
-        "WS",
+        "XHTTP",
         "",
         0,
         0,
@@ -246,7 +292,7 @@ try:
         "",
         "",
         "",
-        encode(["h2", "http/1.1"]),
+        encode(["h2"]),
         "chrome",
         "",
         1,
@@ -258,7 +304,7 @@ try:
     conn.commit()
 
     print("Created inbounds:")
-    print(f"  VLESS WS:    ID={vless_id}, port=8888")
+    print(f"  VLESS XHTTP: ID={vless_id}, port=8888")
     print(f"  Hysteria 2:  ID={hysteria_id}, port=443/UDP")
     print(f"  TUIC:        ID={tuic_id}, port=8443/UDP")
     print(f"  WebSocket Host: {domain}:443")
