@@ -46,7 +46,7 @@ hostnamectl set-hostname "$DOMAIN"
 
 [[ "$UPDATE_SYSTEM" == "true" ]] && update_system
 
-ensure_dependencies curl dnsutils
+ensure_dependencies curl
 
 if [[ "$USE_SSH_KEYS" == "true" && ${#SSH_KEYS[@]} -gt 0 ]]; then
     install_ssh_keys

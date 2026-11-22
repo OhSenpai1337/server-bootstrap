@@ -143,7 +143,9 @@ check_ssh_connection() {
 
         [[ "$answer" =~ ^[Yy]$ ]] || die "SSH host key verification failed."
 
-        ssh-keygen -R "$SSH_DEST" >/dev/null ||
+        local host="${SSH_DEST##*@}"
+
+        ssh-keygen -R "$host" >/dev/null ||
             die "Failed to remove the old SSH host key."
 
         sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_DEST" "echo SSH connection successful" ||
