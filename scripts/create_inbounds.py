@@ -36,7 +36,7 @@ vless_stream = {
     "xhttpSettings": {
       "path": vless_ws_path,
       "host": "",
-      "mode": "stream-up",
+      "mode": "stream-one",
       "xPaddingBytes": "100-1000",
       "xPaddingObfsMode": False,
       "xPaddingKey": "",
@@ -61,7 +61,15 @@ vless_stream = {
       "scMinPostsIntervalMs": "",
       "uplinkChunkSize": 0,
       "noGRPCHeader": False,
-      "enableXmux": False
+      "xmux": {
+        "maxConcurrency": "32-64",
+        "maxConnections": 0,
+        "cMaxReuseTimes": "0",
+        "hMaxRequestTimes": "1000",
+        "hMaxReusableSecs": "3600",
+        "hKeepAlivePeriod": 0
+      },
+      "enableXmux": True
     },
     "security": "none",
     "sockopt": {
