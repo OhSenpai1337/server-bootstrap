@@ -89,64 +89,6 @@ vless_stream = {
     }
 }
 
-# Hysteria 2
-hysteria_settings = {
-    "version": 2
-}
-
-hysteria_stream = {
-    "network": "hysteria",
-    "hysteriaSettings": {
-        "version": 2,
-        "udpIdleTimeout": 60,
-        "masquerade": {
-            "type": "proxy",
-            "dir": "",
-            "url": f"https://{domain}/",
-            "rewriteHost": False,
-            "insecure": False,
-            "content": "",
-            "headers": {},
-            "statusCode": 0
-        }
-    },
-    "security": "tls",
-    "tlsSettings": {
-        "serverName": domain,
-        "minVersion": "1.2",
-        "maxVersion": "1.3",
-        "cipherSuites": "",
-        "rejectUnknownSni": False,
-        "disableSystemRoot": False,
-        "enableSessionResumption": False,
-        "certificates": [{
-            "ocspStapling": 0,
-            "oneTimeLoading": False,
-            "usage": "encipherment",
-            "buildChain": False,
-            "certificateFile": cert_file,
-            "keyFile": key_file,
-            "useFile": True
-        }],
-        "alpn": ["h3"],
-        "echServerKeys": "",
-        "settings": {
-            "fingerprint": "chrome",
-            "echConfigList": "",
-            "pinnedPeerCertSha256": [],
-            "verifyPeerCertByName": ""
-        }
-    },
-    "finalmask": {
-        "udp": [{
-            "type": "salamander",
-            "settings": {
-                "password": hysteria_password
-            }
-        }]
-    }
-}
-
 # TUIC
 tuic_settings = {
     "server": {
@@ -172,7 +114,6 @@ try:
     # Prevent duplicate inbounds
     tags = [
         "in-8888-tcp",
-        "in-443-udp",
         "in-8443-udp"
     ]
 
@@ -225,19 +166,7 @@ try:
         flow=1
     )
 
-    # 2. Hysteria 2
-    hysteria_id = add_inbound(
-        remark=f"{server_country} (Hysteria)" if autodetect_country == "true" else "Hysteria",
-        tag="in-443-udp",
-        listen="",
-        port=443,
-        protocol="hysteria",
-        settings=hysteria_settings,
-        stream_settings=hysteria_stream,
-        flow=0
-    )
-
-    # 3. TUIC
+    # 2. TUIC
     tuic_id = add_inbound(
         remark=f"{server_country} (TUIC)" if autodetect_country == "true" else "TUIC",
         tag="in-8443-udp",
@@ -292,7 +221,7 @@ try:
         "",
         "",
         "",
-        encode(["h2"]),
+        encode(["h2", "h3"]),
         "chrome",
         "",
         1,
@@ -305,7 +234,6 @@ try:
 
     print("Created inbounds:")
     print(f"  VLESS XHTTP: ID={vless_id}, port=8888")
-    print(f"  Hysteria 2:  ID={hysteria_id}, port=443/UDP")
     print(f"  TUIC:        ID={tuic_id}, port=8443/UDP")
     print(f"  WebSocket Host: {domain}:443")
 

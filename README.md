@@ -41,8 +41,7 @@ Server Bootstrap - Bash-скрипт для автоматизации уста�
 
 | Протокол | Транспорт | Защита |
 |---|---|---|
-| VLESS | XHTTP | TLS |
-| Hysteria2 | UDP | TLS |
+| VLESS | XHTTP (TCP+UDP) | TLS |
 | TUIC v5 | UDP | TLS |
 
 ## Установка
@@ -133,7 +132,7 @@ sudo bash setup.sh
 | `XUI_SUBSCRIPTION_PORT` | `465` | Порт сервиса подписок. |
 | `XUI_SUB_PATH` | `/SUB_PATH/` | URL-путь стандартной подписки. |
 | `XUI_SUB_CLASH_PATH` | `/SUB_CLASH_PATH/` | URL-путь подписки Clash. |
-| `XUI_CREATE_INBOUNDS` | `true` | Автоматически создавать подключения VLESS-XHTTP, Hysteria2 и TUICv5. |
+| `XUI_CREATE_INBOUNDS` | `true` | Автоматически создавать подключения VLESS-XHTTP и TUICv5. |
 | `XUI_AUTODETECT_COUNTRY` | `true` | Автоматически определять страну расположения сервера и использовать её в названиях подключений. При отключении используются стандартные названия. |
 
 **Проверенные установочные скрипты:**

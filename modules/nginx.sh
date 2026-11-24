@@ -232,8 +232,8 @@ server {
 
 # HTTPS + HTTP/2
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen [::]:443 ssl ipv6only=off reuseport;
+    listen [::]:443 quic reuseport ipv6only=off;
     http2 on;
     server_name $DOMAIN;
 
