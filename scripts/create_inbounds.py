@@ -243,7 +243,7 @@ try:
     print("Created inbounds:")
     print(f"  VLESS XHTTP: ID={vless_id}, port=8888")
     print(f"  TUIC:        ID={tuic_id}, port=8443/UDP")
-    print(f"  WebSocket Host: {domain}:443")
+    print(f"  XHTTP Host:  {domain}:443")
 
 except Exception:
     conn.rollback()
