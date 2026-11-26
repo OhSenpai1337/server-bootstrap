@@ -52,7 +52,7 @@ vless_stream = {
       "uplinkDataPlacement": "",
       "uplinkDataKey": "",
       "scMaxEachPostBytes": "",
-      "noSSEHeader": False,
+      "noSSEHeader": True,
       "scMaxBufferedPosts": 30,
       "scStreamUpServerSecs": "20-80",
       "serverMaxHeaderBytes": 0,
