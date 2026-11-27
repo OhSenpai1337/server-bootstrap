@@ -46,6 +46,16 @@ hostnamectl set-hostname "$DOMAIN"
 
 [[ "$UPDATE_SYSTEM" == "true" ]] && update_system
 
+SYSCTL_TEMPLATE="$TEMPLATES_DIR/99-network-tuning.conf"
+SYSCTL_CONFIG="/etc/sysctl.d/99-network-tuning.conf"
+
+[[ -f "$SYSCTL_TEMPLATE" ]] || die "Sysctl template not found: $SYSCTL_TEMPLATE"
+
+install -m 644 "$SYSCTL_TEMPLATE" "$SYSCTL_CONFIG"
+sysctl --system
+
+log "Network tuning applied."
+
 ensure_dependencies curl bind9-dnsutils
 
 if [[ "$USE_SSH_KEYS" == "true" && ${#SSH_KEYS[@]} -gt 0 ]]; then

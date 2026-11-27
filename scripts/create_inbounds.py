@@ -3,6 +3,9 @@ import os
 import sqlite3
 import secrets
 import time
+import re
+import subprocess
+import shutil
 
 DB_FILE = "/etc/x-ui/x-ui.db"
 
@@ -17,6 +20,50 @@ server_country = os.environ.get("SERVER_COUNTRY", "Unknown")
 def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
+def generate_vless_encryption():
+    xray_candidates = [
+        "/usr/local/x-ui/bin/xray-linux-amd64",
+        "/usr/local/x-ui/bin/xray",
+        shutil.which("xray")
+    ]
+
+    xray_bin = next(
+        (path for path in xray_candidates if path and os.path.isfile(path) and os.access(path, os.X_OK)),
+        None
+    )
+
+    if not xray_bin:
+        raise RuntimeError("Xray binary not found")
+
+    result = subprocess.run(
+        [xray_bin, "vlessenc"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30
+    )
+
+    output = result.stdout
+
+    match = re.search(
+        r"Authentication:\s*X25519[^\n]*\n"
+        r'"decryption"\s*:\s*"([^"]+)"\s*\n'
+        r'"encryption"\s*:\s*"([^"]+)"',
+        output
+    )
+
+    if not match:
+        raise RuntimeError("Failed to parse X25519 Native keys")
+
+    decryption, encryption = match.groups()
+
+    if ".native." not in decryption or ".native." not in encryption:
+        raise RuntimeError("Generated keys are not X25519 Native")
+
+    return {
+        "decryption": decryption,
+        "encryption": encryption
+    }
 
 sniffing = {
     "enabled": True,
@@ -26,18 +73,16 @@ sniffing = {
 # VLESS + WebSocket
 vless_settings = {
     "clients": [],
-    "decryption": "none",
-    "encryption": "none",
-    "disable_flow": 1
+    **generate_vless_encryption()
 }
 
 vless_stream = {
     "network": "xhttp",
     "xhttpSettings": {
       "path": vless_ws_path,
-      "host": "",
+      "host": domain,
       "mode": "stream-one",
-      "xPaddingBytes": "100-1000",
+      "xPaddingBytes": "128-1120",
       "xPaddingObfsMode": False,
       "xPaddingKey": "",
       "xPaddingHeader": "",
@@ -52,7 +97,7 @@ vless_stream = {
       "uplinkDataPlacement": "",
       "uplinkDataKey": "",
       "scMaxEachPostBytes": "",
-      "noSSEHeader": True,
+      "noSSEHeader": False,
       "scMaxBufferedPosts": 30,
       "scStreamUpServerSecs": "20-80",
       "serverMaxHeaderBytes": 0,
@@ -62,11 +107,11 @@ vless_stream = {
       "uplinkChunkSize": 0,
       "noGRPCHeader": False,
       "xmux": {
-        "maxConcurrency": "32-64",
-        "maxConnections": 0,
-        "cMaxReuseTimes": "0",
-        "hMaxRequestTimes": "1000",
-        "hMaxReusableSecs": "3600",
+        "maxConcurrency": "",
+        "maxConnections": "1-3",
+        "cMaxReuseTimes": 0,
+        "hMaxRequestTimes": "600-900",
+        "hMaxReusableSecs": "1800-3000",
         "hKeepAlivePeriod": 0
       },
       "enableXmux": True
@@ -75,7 +120,7 @@ vless_stream = {
     "sockopt": {
       "tcpcongestion": "bbr",
       "trustedXForwardedFor": [
-        "X-Forwarded-For"
+        "X-Real-IP"
       ],
       "acceptProxyProtocol": False,
       "tcpFastOpen": False,
@@ -171,7 +216,7 @@ try:
         protocol="vless",
         settings=vless_settings,
         stream_settings=vless_stream,
-        flow=1
+        flow=0
     )
 
     # 2. TUIC
